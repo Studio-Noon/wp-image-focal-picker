@@ -1,0 +1,65 @@
+.Noon_Focal_Retina_Image_Generator_Dialog{
+
+    width: 800px !important;
+}
+
+.Noon_Focal_Retina_Container{
+
+    display: block;
+
+    .focal-preview{
+
+        display: flex;
+        height: 100%;
+        width: 100%;
+        position: relative;
+        margin-bottom: 0.5rem;
+
+        img.preview{
+
+            max-width: 100%;
+            height: auto;
+        }
+
+        img.icon{
+            transform: translate(-50%, -50%);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+
+        }
+
+    }
+
+}
+
+
+.Noon_Focal_Retina_Image_Generator_Wrapper{
+    max-width: fit-content;
+    margin: 0 auto;
+    margin-bottom: 16px;
+
+    width: 100%;
+
+    img{
+        max-width: 100%;
+        height: auto;        
+    }
+
+    .details-image{
+        margin-bottom: 0 !important;
+    }
+}
+
+.ui-front{
+    z-index: 160000 !important;
+}
+
+.ui-widget-overlay{
+    z-index: 159999 !important;
+
+}
+
+.media-modal{
+    z-index: 159998 !important;
+}
