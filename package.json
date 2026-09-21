@@ -1,12 +1,12 @@
 {
-  "name": "noon-focal-retina-image-generator",
-  "version": "1.1.0",
+  "name": "focal-point-images-smart-crop",
+  "version": "1.2.1",
   "description": "Focal point picker with on-the-fly focal-cropped, retina and WebP images served through Glide.",
   "private": true,
   "scripts": {
     "build": "wp-scripts build admin/src/index.js admin/src/upload/media.js --output-path=admin/build",
     "start": "wp-scripts start admin/src/index.js admin/src/upload/media.js --output-path=admin/build",
-    "zip": "dir-archiver --src . --dest ../noon-focal-retina-image-generator.zip --exclude .DS_Store .git .gitignore node_modules package-lock.json package.json admin/src README.md"
+    "zip": "dir-archiver --src . --dest ../../focal-point-images-smart-crop.zip --exclude .DS_Store .git .gitignore .distignore .claude node_modules package-lock.json package.json admin/src README.md"
   },
   "author": "Studio Noon LTD",
   "license": "GPL-2.0-or-later",

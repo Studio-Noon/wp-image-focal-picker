@@ -19,7 +19,7 @@ wp_unschedule_hook( 'noon_focal_warm_attachment' );
 
 $noon_focal_secret = noon_focal_secret_file();
 if ( file_exists( $noon_focal_secret ) ) {
-	unlink( $noon_focal_secret );
+	wp_delete_file( $noon_focal_secret );
 }
 
 if ( is_dir( NOON_FOCAL_CACHE_DIR ) ) {

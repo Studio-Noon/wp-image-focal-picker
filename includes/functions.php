@@ -5,6 +5,10 @@
  * @package Noon_Focal_Retina_Image_Generator
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use League\Glide\Urls\UrlBuilderFactory;
 
 /**
@@ -143,142 +147,160 @@ function noon_focal_image_params( $attachment_id, $size, $fit = 'crop' ) {
 
 }
 
+/* -------------------------------------------------------------------------
+ * Responsive sizes
+ * ---------------------------------------------------------------------- */
+
 /**
- * Signed Glide URL for an attachment at a size.
+ * add_image_size() plus a responsive definition, so wp_get_attachment_image()
+ * and the_post_thumbnail() deliver the size at more than one box.
  *
- * @deprecated 1.1.0 Use wp_get_attachment_image_url( $id, $size ); for 2x use
- *                   wp_get_attachment_image_srcset() or wp_get_attachment_image().
- *
- * @param int          $attachment_id
- * @param string|array $size   Registered size name, [w, h] or ['w' => , 'h' => ].
- * @param bool         $retina Request the 2x (dpr=2) rendition.
- * @param string       $fit    Glide fit; 'crop' uses the stored focal point.
- * @return string Empty for an unknown size or missing file.
+ * @param string $name
+ * @param int    $width
+ * @param int    $height
+ * @param bool   $crop
+ * @param array  $args {
+ *     @type array  $breakpoints Viewport min-width (px) => box, where a box is [w, h],
+ *                               ['w' => , 'h' => , 'crop' => ] or a registered size name.
+ *                               The size's own box serves viewports below the smallest
+ *                               min-width; a 0 key overrides it. Output is a <picture>
+ *                               with one <source> per breakpoint at 1x/1.5x/2x.
+ *     @type int[]  $widths      srcset widths at the size's own aspect ratio. Ignored when
+ *                               breakpoints are given. Defaults to an automatic ladder.
+ *     @type string $sizes       The sizes attribute. Auto-generated when omitted.
+ * }
  */
-if ( ! function_exists( 'noon_get_attachment_image_url' ) ) {
-	function noon_get_attachment_image_url( $attachment_id, $size = 'thumbnail', $retina = false, $fit = 'crop' ) {
-
-		_deprecated_function( __FUNCTION__, '1.1.0', 'wp_get_attachment_image_url()' );
-
-		$params = noon_focal_image_params( $attachment_id, $size, $fit );
-
-		if ( ! $params ) {
-			return '';
-		}
-
-		if ( $retina ) {
-			$params['dpr'] = 2;
-		}
-
-		return noon_focal_glide_url( $attachment_id, $params );
-
-	}
+function noon_focal_add_image_size( $name, $width, $height = 0, $crop = false, array $args = array() ) {
+	add_image_size( $name, $width, $height, $crop );
+	noon_focal_set_responsive_size( $name, $args );
 }
 
 /**
- * Output a responsive <picture> (or single <img>) with 1x/2x signed Glide URLs.
- *
- * @deprecated 1.1.0 Use wp_get_attachment_image( $id, $size, false, [ 'class' => …, 'sizes' => … ] ):
- *                   it now emits focal-cropped Glide URLs with a 1x/1.5x/2x srcset and
- *                   loading="lazy". For art direction (a different size per breakpoint) build
- *                   a <picture> from wp_get_attachment_image_srcset( $id, $size ) per <source>.
- *
- * @param int   $attachment_id
- * @param array $attr {
- *     @type string|array $default      Size used for the fallback <img>. Default 'medium'.
- *     @type bool         $echo         Echo (true) or return (false). Default true.
- *     @type string       $type         'picture' or 'img'. Default 'picture'.
- *     @type string       $class        Extra class names for the <img>.
- *     @type array        $breakpoints  min-width (px) => size. One entry switches to a single <img>.
- *     @type bool         $transparency Force PNG output.
- *     @type bool         $lazy         Emit data-src/data-srcset + class "lazy" and loading="lazy". Default true.
- * }
- * @return string|void
+ * Attach a responsive definition to an already-registered size (core sizes
+ * included). See noon_focal_add_image_size() for $args.
  */
-if ( ! function_exists( 'noon_get_attachment_image' ) ) {
-function noon_get_attachment_image( $attachment_id, $attr = array() ) {
+function noon_focal_set_responsive_size( $name, array $args = array() ) {
 
-	_deprecated_function( __FUNCTION__, '1.1.0', 'wp_get_attachment_image()' );
+	$config = array(
+		'breakpoints' => array(),
+		'widths'      => array(),
+		'sizes'       => '',
+	);
 
-	$attr = wp_parse_args( $attr, array(
-		'default'      => 'medium',
-		'echo'         => true,
-		'type'         => 'picture',
-		'class'        => '',
-		'breakpoints'  => array(),
-		'transparency' => false,
-		'lazy'         => true,
-	) );
+	foreach ( (array) ( $args['breakpoints'] ?? array() ) as $min_width => $box ) {
+		$box = noon_focal_resolve_size( $box );
+		if ( $box && ( $box['w'] > 0 || $box['h'] > 0 ) ) {
+			$config['breakpoints'][ max( 0, (int) $min_width ) ] = $box;
+		}
+	}
+	ksort( $config['breakpoints'], SORT_NUMERIC );
 
-	$breakpoints = is_array( $attr['breakpoints'] ) ? $attr['breakpoints'] : array();
-	$lazy        = ! empty( $attr['lazy'] );
-	$extra       = $attr['transparency'] ? array( 'fm' => 'png' ) : array();
+	$config['widths'] = array_values( array_unique( array_filter( array_map( 'intval', (array) ( $args['widths'] ?? array() ) ) ) ) );
+	sort( $config['widths'] );
 
-	// A single breakpoint is just an image at that size.
-	if ( 1 === count( $breakpoints ) ) {
-		$attr['type']    = 'img';
-		$attr['default'] = reset( $breakpoints );
-		$breakpoints     = array();
+	$config['sizes'] = (string) ( $args['sizes'] ?? '' );
+
+	noon_focal_responsive_sizes( array( (string) $name => $config ) );
+
+}
+
+/**
+ * All responsive definitions as name => ['breakpoints', 'widths', 'sizes'].
+ * Registry lives here; pass $add to register (used by noon_focal_set_responsive_size()).
+ */
+function noon_focal_responsive_sizes( array $add = null ) {
+
+	static $sizes = array();
+
+	if ( null !== $add ) {
+		$sizes = array_merge( $sizes, $add );
+		return $sizes;
 	}
 
-	$srcset = function ( $size ) use ( $attachment_id, $extra ) {
-		$params = noon_focal_image_params( $attachment_id, $size );
-		if ( ! $params ) {
-			return null;
-		}
-		$params += $extra;
-		return array(
-			'params' => $params,
-			'srcset' => noon_focal_glide_url( $attachment_id, $params ) . ' 1x, '
-				. noon_focal_glide_url( $attachment_id, $params + array( 'dpr' => 2 ) ) . ' 2x',
-		);
-	};
+	return apply_filters( 'noon_focal_responsive_sizes', $sizes );
 
-	$fallback = $srcset( $attr['default'] );
-	$alt      = (string) get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
-	$class    = trim( ( $lazy ? 'lazy ' : '' ) . $attr['class'] );
+}
 
-	$img  = '<img';
-	$img .= ' class="' . esc_attr( $class ) . '"';
-	$img .= ' alt="' . esc_attr( $alt ) . '"';
+/**
+ * Responsive definition for a size name, or null. Array sizes never match.
+ */
+function noon_focal_responsive_size( $name ) {
 
-	if ( $fallback ) {
-		$src  = noon_focal_glide_url( $attachment_id, $fallback['params'] );
-		$img .= ' width="' . (int) $fallback['params']['w'] . '"';
-		if ( ! empty( $fallback['params']['h'] ) ) {
-			$img .= ' height="' . (int) $fallback['params']['h'] . '"';
-		}
-		$img .= $lazy
-			? ' loading="lazy" data-src="' . esc_url( $src ) . '" data-srcset="' . esc_attr( $fallback['srcset'] ) . '"'
-			: ' src="' . esc_url( $src ) . '" srcset="' . esc_attr( $fallback['srcset'] ) . '"';
+	if ( ! is_string( $name ) ) {
+		return null;
 	}
 
-	$img .= '>';
+	return noon_focal_responsive_sizes()[ $name ] ?? null;
 
-	$html = '<picture>';
+}
 
-	if ( 'img' !== $attr['type'] ) {
+/**
+ * The box a responsive size uses below its smallest breakpoint: the size's
+ * registered box unless a 0 breakpoint overrides it.
+ */
+function noon_focal_responsive_base( $name ) {
+	$config = noon_focal_responsive_size( $name );
+	return $config['breakpoints'][0] ?? noon_focal_resolve_size( $name );
+}
 
-		krsort( $breakpoints, SORT_NUMERIC );
+/**
+ * srcset boxes for a responsive size without breakpoints: its widths (or the
+ * automatic ladder) times every dpr, at the size's aspect ratio, capped at the
+ * original. Each is ['w' => , 'h' => ]. Empty for breakpoint sizes.
+ */
+function noon_focal_responsive_candidates( $attachment_id, $name ) {
 
-		foreach ( $breakpoints as $min_width => $size ) {
-			$source = $srcset( $size );
-			if ( ! $source ) {
+	$config = noon_focal_responsive_size( $name );
+
+	if ( ! $config || $config['breakpoints'] ) {
+		return array();
+	}
+
+	$box = noon_focal_dimensions( $attachment_id, noon_focal_responsive_base( $name ) );
+
+	if ( ! $box || $box['w'] < 1 || $box['h'] < 1 ) {
+		return array();
+	}
+
+	$widths = $config['widths'];
+
+	if ( ! $widths ) {
+		/**
+		 * Widths offered for responsive sizes that give none of their own. Only
+		 * those below the size's width are used; the width itself is always added.
+		 */
+		$ladder = apply_filters( 'noon_focal_auto_widths', array( 320, 480, 640, 768, 1024, 1280, 1536, 1920 ), $name );
+		$widths = array_filter( array_map( 'intval', (array) $ladder ), function ( $w ) use ( $box ) {
+			return $w > 0 && $w < $box['w'];
+		} );
+	}
+
+	$widths[] = $box['w'];
+
+	$meta = wp_get_attachment_metadata( $attachment_id );
+	$max  = (int) ( $meta['width'] ?? 0 );
+
+	$candidates = array();
+
+	foreach ( $widths as $w ) {
+		foreach ( Noon_Focal_Retina_Image_Generator_Admin::dprs() as $dpr ) {
+
+			$cw = (int) round( $w * $dpr );
+
+			if ( $cw < 1 || ( $max > 0 && $cw > $max ) ) {
 				continue;
 			}
-			$html .= '<source media="(min-width: ' . (int) $min_width . 'px)" '
-				. ( $lazy ? 'data-srcset' : 'srcset' ) . '="' . esc_attr( $source['srcset'] ) . '">';
+
+			$candidates[ $cw ] = array(
+				'w' => $cw,
+				'h' => max( 1, (int) round( $cw * $box['h'] / $box['w'] ) ),
+			);
+
 		}
-
 	}
 
-	$html .= $img . '</picture>';
+	ksort( $candidates, SORT_NUMERIC );
 
-	if ( empty( $attr['echo'] ) ) {
-		return $html;
-	}
+	return array_values( $candidates );
 
-	echo $html;
-
-}
 }

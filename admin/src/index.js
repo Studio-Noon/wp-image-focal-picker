@@ -12,3 +12,4 @@
 */
 
 import './featured-image/index.js';
+import './blocks/index.js';

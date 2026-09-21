@@ -19,7 +19,7 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 		add_settings_section(
 			'noon_focal_status',
-			__( 'Focal images — status', 'noon-focal-retina-image-generator' ),
+			__( 'Focal images — status', 'focal-point-images-smart-crop' ),
 			array( $this, 'render' ),
 			'media'
 		);
@@ -56,7 +56,7 @@ class Noon_Focal_Retina_Image_Generator_Status {
 	 */
 	private function server() {
 
-		$software = strtolower( $_SERVER['SERVER_SOFTWARE'] ?? '' );
+		$software = strtolower( $this->server_software() );
 
 		foreach ( array( 'nginx', 'litespeed', 'apache' ) as $name ) {
 			if ( false !== strpos( $software, $name ) ) {
@@ -68,23 +68,29 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 	}
 
+	private function server_software() {
+		return isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : '';
+	}
+
 	private function check_server( $server ) {
 
-		$software = $_SERVER['SERVER_SOFTWARE'] ?? __( 'unknown', 'noon-focal-retina-image-generator' );
+		$software = $this->server_software() ?: __( 'unknown', 'focal-point-images-smart-crop' );
 
 		if ( 'nginx' === $server ) {
 			return array(
-				'label' => __( 'Web server', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Web server', 'focal-point-images-smart-crop' ),
 				'state' => 'info',
-				'text'  => sprintf( __( 'nginx (%s). .htaccess is ignored; the rewrite must live in the nginx server config.', 'noon-focal-retina-image-generator' ), $software ),
+				/* translators: %s: server software */
+				'text'  => sprintf( __( 'nginx (%s). .htaccess is ignored; the rewrite must live in the nginx server config.', 'focal-point-images-smart-crop' ), $software ),
 			);
 		}
 
 		if ( 'other' === $server ) {
 			return array(
-				'label' => __( 'Web server', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Web server', 'focal-point-images-smart-crop' ),
 				'state' => 'warn',
-				'text'  => sprintf( __( 'Unrecognised server (%s). Check the live request result above.', 'noon-focal-retina-image-generator' ), $software ),
+				/* translators: %s: server software */
+				'text'  => sprintf( __( 'Unrecognised server (%s). Check the live request result above.', 'focal-point-images-smart-crop' ), $software ),
 			);
 		}
 
@@ -93,12 +99,13 @@ class Noon_Focal_Retina_Image_Generator_Status {
 			: 'unknown';
 
 		return array(
-			'label' => __( 'Web server', 'noon-focal-retina-image-generator' ),
+			'label' => __( 'Web server', 'focal-point-images-smart-crop' ),
 			'state' => 'off' === $mod_rewrite ? 'error' : 'ok',
 			'text'  => sprintf(
-				__( '%1$s — mod_rewrite: %2$s', 'noon-focal-retina-image-generator' ),
+				/* translators: 1: server software, 2: mod_rewrite state */
+				__( '%1$s — mod_rewrite: %2$s', 'focal-point-images-smart-crop' ),
 				$software,
-				'unknown' === $mod_rewrite ? __( 'cannot detect from PHP (php-fpm); see live request', 'noon-focal-retina-image-generator' ) : $mod_rewrite
+				'unknown' === $mod_rewrite ? __( 'cannot detect from PHP (php-fpm); see live request', 'focal-point-images-smart-crop' ) : $mod_rewrite
 			),
 		);
 
@@ -117,18 +124,20 @@ class Noon_Focal_Retina_Image_Generator_Status {
 			return array(
 				'label' => '.htaccess',
 				'state' => 'ok',
-				'text'  => sprintf( __( 'Rewrite block present in %s', 'noon-focal-retina-image-generator' ), $file ),
+				/* translators: %s: .htaccess path */
+				'text'  => sprintf( __( 'Rewrite block present in %s', 'focal-point-images-smart-crop' ), $file ),
 			);
 		}
 
 		$why = is_multisite()
-			? __( 'WordPress does not write .htaccess on multisite, so the block has to be added by hand:', 'noon-focal-retina-image-generator' )
-			: __( 'Block missing. Re-saving Settings → Permalinks should write it; if the file is not writable, add it by hand:', 'noon-focal-retina-image-generator' );
+			? __( 'WordPress does not write .htaccess on multisite, so the block has to be added by hand:', 'focal-point-images-smart-crop' )
+			: __( 'Block missing. Re-saving Settings → Permalinks should write it; if the file is not writable, add it by hand:', 'focal-point-images-smart-crop' );
 
 		return array(
 			'label'  => '.htaccess',
 			'state'  => 'error',
-			'text'   => ( $exists ? '' : sprintf( __( '%s not found. ', 'noon-focal-retina-image-generator' ), $file ) ) . $why,
+			/* translators: %s: .htaccess path */
+			'text'   => ( $exists ? '' : sprintf( __( '%s not found. ', 'focal-point-images-smart-crop' ), $file ) ) . $why,
 			'detail' => $rules,
 		);
 
@@ -152,9 +161,9 @@ class Noon_Focal_Retina_Image_Generator_Status {
 		$conf .= "}\n";
 
 		return array(
-			'label'  => __( 'nginx config', 'noon-focal-retina-image-generator' ),
+			'label'  => __( 'nginx config', 'focal-point-images-smart-crop' ),
 			'state'  => 'info',
-			'text'   => __( 'Cannot be inspected from PHP — rely on the live request result. If it is failing, add this to the nginx config and reload:', 'noon-focal-retina-image-generator' ),
+			'text'   => __( 'Cannot be inspected from PHP — rely on the live request result. If it is failing, add this to the nginx config and reload:', 'focal-point-images-smart-crop' ),
 			'detail' => $conf,
 		);
 
@@ -166,18 +175,20 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 		if ( ! defined( 'NOON_IMAGE_SECRET' ) ) {
 			return array(
-				'label' => __( 'Signing secret', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Signing secret', 'focal-point-images-smart-crop' ),
 				'state' => 'error',
-				'text'  => sprintf( __( 'Not available. %s is missing or unreadable; reload this page to regenerate it.', 'noon-focal-retina-image-generator' ), $file ),
+				/* translators: %s: secret file path */
+				'text'  => sprintf( __( 'Not available. %s is missing or unreadable; reload this page to regenerate it.', 'focal-point-images-smart-crop' ), $file ),
 			);
 		}
 
 		return array(
-			'label' => __( 'Signing secret', 'noon-focal-retina-image-generator' ),
+			'label' => __( 'Signing secret', 'focal-point-images-smart-crop' ),
 			'state' => file_exists( $file ) ? 'ok' : 'warn',
 			'text'  => file_exists( $file )
-				? sprintf( __( 'Loaded from %s', 'noon-focal-retina-image-generator' ), $file )
-				: __( 'Defined in wp-config.php only — media.php cannot see that, so signatures will not match. Remove the constant and let the plugin generate the file.', 'noon-focal-retina-image-generator' ),
+				/* translators: %s: secret file path */
+				? sprintf( __( 'Loaded from %s', 'focal-point-images-smart-crop' ), $file )
+				: __( 'Defined in wp-config.php only — media.php cannot see that, so signatures will not match. Remove the constant and let the plugin generate the file.', 'focal-point-images-smart-crop' ),
 		);
 
 	}
@@ -189,29 +200,33 @@ class Noon_Focal_Retina_Image_Generator_Status {
 		if ( ! is_dir( $dir ) ) {
 			$parent = dirname( $dir );
 			return array(
-				'label' => __( 'Cache directory', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Cache directory', 'focal-point-images-smart-crop' ),
 				'state' => wp_is_writable( $parent ) ? 'info' : 'error',
 				'text'  => wp_is_writable( $parent )
-					? sprintf( __( '%s does not exist yet; it is created on the first render.', 'noon-focal-retina-image-generator' ), $dir )
-					: sprintf( __( '%1$s does not exist and %2$s is not writable.', 'noon-focal-retina-image-generator' ), $dir, $parent ),
+					/* translators: %s: cache directory */
+					? sprintf( __( '%s does not exist yet; it is created on the first render.', 'focal-point-images-smart-crop' ), $dir )
+					/* translators: 1: cache directory, 2: its parent directory */
+					: sprintf( __( '%1$s does not exist and %2$s is not writable.', 'focal-point-images-smart-crop' ), $dir, $parent ),
 			);
 		}
 
 		if ( ! wp_is_writable( $dir ) ) {
 			return array(
-				'label' => __( 'Cache directory', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Cache directory', 'focal-point-images-smart-crop' ),
 				'state' => 'error',
-				'text'  => sprintf( __( '%s is not writable by PHP.', 'noon-focal-retina-image-generator' ), $dir ),
+				/* translators: %s: cache directory */
+				'text'  => sprintf( __( '%s is not writable by PHP.', 'focal-point-images-smart-crop' ), $dir ),
 			);
 		}
 
 		list( $files, $bytes, $capped ) = $this->measure_dir( $dir, 5000 );
 
 		return array(
-			'label' => __( 'Cache directory', 'noon-focal-retina-image-generator' ),
+			'label' => __( 'Cache directory', 'focal-point-images-smart-crop' ),
 			'state' => 'ok',
 			'text'  => sprintf(
-				__( '%1$s — %2$s renditions, %3$s', 'noon-focal-retina-image-generator' ),
+				/* translators: 1: cache directory, 2: number of files, 3: total size */
+				__( '%1$s — %2$s renditions, %3$s', 'focal-point-images-smart-crop' ),
 				$dir,
 				number_format_i18n( $files ) . ( $capped ? '+' : '' ),
 				size_format( $bytes ) . ( $capped ? '+' : '' )
@@ -261,20 +276,20 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 		if ( ! $parts ) {
 			return array(
-				'label' => __( 'Image library', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Image library', 'focal-point-images-smart-crop' ),
 				'state' => 'error',
-				'text'  => __( 'Neither GD nor Imagick is available; Glide cannot render anything.', 'noon-focal-retina-image-generator' ),
+				'text'  => __( 'Neither GD nor Imagick is available; Glide cannot render anything.', 'focal-point-images-smart-crop' ),
 			);
 		}
 
 		$webp = noon_focal_webp_supported();
 
 		return array(
-			'label' => __( 'Image library', 'noon-focal-retina-image-generator' ),
+			'label' => __( 'Image library', 'focal-point-images-smart-crop' ),
 			'state' => $webp ? 'ok' : 'warn',
 			'text'  => implode( ', ', $parts ) . ' — ' . ( $webp
-				? __( 'WebP output supported', 'noon-focal-retina-image-generator' )
-				: __( 'no WebP support; browsers will get JPEG/PNG', 'noon-focal-retina-image-generator' ) ),
+				? __( 'WebP output supported', 'focal-point-images-smart-crop' )
+				: __( 'no WebP support; browsers will get JPEG/PNG', 'focal-point-images-smart-crop' ) ),
 		);
 
 	}
@@ -283,37 +298,42 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 		if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
 			return array(
-				'label' => __( 'WP-Cron', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'WP-Cron', 'focal-point-images-smart-crop' ),
 				'state' => 'warn',
-				'text'  => __( 'DISABLE_WP_CRON is set. Background warming only runs if a system cron calls wp-cron.php (or "wp cron event run --due-now").', 'noon-focal-retina-image-generator' ),
+				'text'  => __( 'DISABLE_WP_CRON is set. Background warming only runs if a system cron calls wp-cron.php (or "wp cron event run --due-now").', 'focal-point-images-smart-crop' ),
 			);
 		}
 
 		return array(
-			'label' => __( 'WP-Cron', 'noon-focal-retina-image-generator' ),
+			'label' => __( 'WP-Cron', 'focal-point-images-smart-crop' ),
 			'state' => 'ok',
-			'text'  => __( 'Enabled; uploads and focal-point changes are warmed in the background.', 'noon-focal-retina-image-generator' ),
+			'text'  => __( 'Enabled; uploads and focal-point changes are warmed in the background.', 'focal-point-images-smart-crop' ),
 		);
 
 	}
 
 	private function check_focal_coverage() {
 
-		global $wpdb;
+		$counts = (array) wp_count_attachments( 'image' );
+		unset( $counts['trash'] );
+		$total  = (int) array_sum( $counts );
 
-		$total = (int) $wpdb->get_var(
-			"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type IN ('image/jpeg','image/png','image/gif','image/webp')"
-		);
-		$set   = (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s WHERE p.post_type = 'attachment'",
-			Noon_Focal_Retina_Image_Generator_Admin::META
-		) );
+		$set = ( new WP_Query( array(
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'post_mime_type' => 'image',
+			'meta_key'       => Noon_Focal_Retina_Image_Generator_Admin::META, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- a count for the status panel, run once per admin page view.
+			'fields'         => 'ids',
+			'posts_per_page' => 1,
+			'no_found_rows'  => false,
+		) ) )->found_posts;
 
 		return array(
-			'label' => __( 'Focal points', 'noon-focal-retina-image-generator' ),
+			'label' => __( 'Focal points', 'focal-point-images-smart-crop' ),
 			'state' => 'info',
 			'text'  => sprintf(
-				__( '%1$s of %2$s images have a focal point set; the rest crop from the centre.', 'noon-focal-retina-image-generator' ),
+				/* translators: 1: images with a focal point, 2: total images */
+				__( '%1$s of %2$s images have a focal point set; the rest crop from the centre.', 'focal-point-images-smart-crop' ),
 				number_format_i18n( $set ),
 				number_format_i18n( $total )
 			),
@@ -327,16 +347,16 @@ class Noon_Focal_Retina_Image_Generator_Status {
 	 */
 	private function check_live_request() {
 
-		$label = __( 'Live request', 'noon-focal-retina-image-generator' );
+		$label = __( 'Live request', 'focal-point-images-smart-crop' );
 
 		if ( ! defined( 'NOON_IMAGE_SECRET' ) ) {
-			return array( 'label' => $label, 'state' => 'error', 'text' => __( 'Skipped: no signing secret.', 'noon-focal-retina-image-generator' ) );
+			return array( 'label' => $label, 'state' => 'error', 'text' => __( 'Skipped: no signing secret.', 'focal-point-images-smart-crop' ) );
 		}
 
 		$id = $this->sample_attachment();
 
 		if ( ! $id ) {
-			return array( 'label' => $label, 'state' => 'info', 'text' => __( 'No JPEG/PNG uploads to test with yet.', 'noon-focal-retina-image-generator' ) );
+			return array( 'label' => $label, 'state' => 'info', 'text' => __( 'No JPEG/PNG uploads to test with yet.', 'focal-point-images-smart-crop' ) );
 		}
 
 		$url = noon_focal_glide_url( $id, array( 'w' => self::TEST_SIZE, 'h' => self::TEST_SIZE, 'fit' => 'crop' ) );
@@ -354,7 +374,8 @@ class Noon_Focal_Retina_Image_Generator_Status {
 			return array(
 				'label'  => $label,
 				'state'  => 'warn',
-				'text'   => sprintf( __( 'Could not fetch from this server (%s). Loopback requests may be blocked; open the URL below in a browser to check by hand.', 'noon-focal-retina-image-generator' ), $response->get_error_message() ),
+				/* translators: %s: error message */
+				'text'   => sprintf( __( 'Could not fetch from this server (%s). Loopback requests may be blocked; open the URL below in a browser to check by hand.', 'focal-point-images-smart-crop' ), $response->get_error_message() ),
 				'detail' => $detail,
 			);
 		}
@@ -372,7 +393,8 @@ class Noon_Focal_Retina_Image_Generator_Status {
 					return array(
 						'label' => $label,
 						'state' => 'ok',
-						'text'  => sprintf( __( 'Working. Rendered %1$d×%1$d as %2$s (%3$s).', 'noon-focal-retina-image-generator' ), self::TEST_SIZE, $type, size_format( strlen( $body ) ) ),
+						/* translators: 1: test size in pixels, 2: content type, 3: file size */
+						'text'  => sprintf( __( 'Working. Rendered %1$d×%1$d as %2$s (%3$s).', 'focal-point-images-smart-crop' ), self::TEST_SIZE, $type, size_format( strlen( $body ) ) ),
 					);
 				}
 
@@ -380,12 +402,14 @@ class Noon_Focal_Retina_Image_Generator_Status {
 					return array(
 						'label'  => $label,
 						'state'  => 'error',
-						'text'   => sprintf( __( 'Not working: the web server returned the original file (%1$d×%2$d) instead of a rendition. The rewrite rule is not active.', 'noon-focal-retina-image-generator' ), $info[0], $info[1] ),
+						/* translators: 1: width, 2: height */
+						'text'   => sprintf( __( 'Not working: the web server returned the original file (%1$d×%2$d) instead of a rendition. The rewrite rule is not active.', 'focal-point-images-smart-crop' ), $info[0], $info[1] ),
 						'detail' => $detail,
 					);
 				}
 
-				return array( 'label' => $label, 'state' => 'error', 'text' => sprintf( __( '200 but not an image (%s). Something else is handling the request.', 'noon-focal-retina-image-generator' ), $type ), 'detail' => $detail );
+				/* translators: %s: content type */
+				return array( 'label' => $label, 'state' => 'error', 'text' => sprintf( __( '200 but not an image (%s). Something else is handling the request.', 'focal-point-images-smart-crop' ), $type ), 'detail' => $detail );
 
 			case in_array( $code, array( 301, 302 ), true ):
 				$to = wp_remote_retrieve_header( $response, 'location' );
@@ -393,22 +417,24 @@ class Noon_Focal_Retina_Image_Generator_Status {
 					'label'  => $label,
 					'state'  => 'error',
 					'text'   => false !== strpos( (string) $to, 'direct=true' )
-						? __( 'media.php is reached but rejected the signature. The secret WordPress signs with differs from the one media.php reads (wp-content/noon-image-secret.php).', 'noon-focal-retina-image-generator' )
-						: sprintf( __( 'Redirected (%1$d) to %2$s — another rule is intercepting the request.', 'noon-focal-retina-image-generator' ), $code, $to ),
+						? __( 'media.php is reached but rejected the signature. The secret WordPress signs with differs from the one media.php reads (wp-content/noon-image-secret.php).', 'focal-point-images-smart-crop' )
+						/* translators: 1: HTTP status, 2: redirect target */
+						: sprintf( __( 'Redirected (%1$d) to %2$s — another rule is intercepting the request.', 'focal-point-images-smart-crop' ), $code, $to ),
 					'detail' => $detail,
 				);
 
 			case 404 === $code:
-				return array( 'label' => $label, 'state' => 'error', 'text' => __( '404. Either the rewrite targets the wrong media.php path, or the source file is missing from the uploads directory.', 'noon-focal-retina-image-generator' ), 'detail' => $detail );
+				return array( 'label' => $label, 'state' => 'error', 'text' => __( '404. Either the rewrite targets the wrong media.php path, or the source file is missing from the uploads directory.', 'focal-point-images-smart-crop' ), 'detail' => $detail );
 
 			case 503 === $code:
-				return array( 'label' => $label, 'state' => 'error', 'text' => __( '503 from media.php: it cannot read the signing secret file.', 'noon-focal-retina-image-generator' ), 'detail' => $detail );
+				return array( 'label' => $label, 'state' => 'error', 'text' => __( '503 from media.php: it cannot read the signing secret file.', 'focal-point-images-smart-crop' ), 'detail' => $detail );
 
 			case 500 === $code:
-				return array( 'label' => $label, 'state' => 'error', 'text' => __( '500 from media.php — see the PHP error log for a line starting "noon-focal-retina-image-generator:".', 'noon-focal-retina-image-generator' ), 'detail' => $detail );
+				return array( 'label' => $label, 'state' => 'error', 'text' => __( '500 from media.php — see the PHP error log for a line starting "focal-point-images-smart-crop:".', 'focal-point-images-smart-crop' ), 'detail' => $detail );
 
 			default:
-				return array( 'label' => $label, 'state' => 'error', 'text' => sprintf( __( 'Unexpected HTTP %d.', 'noon-focal-retina-image-generator' ), $code ), 'detail' => $detail );
+				/* translators: %d: HTTP status */
+				return array( 'label' => $label, 'state' => 'error', 'text' => sprintf( __( 'Unexpected HTTP %d.', 'focal-point-images-smart-crop' ), $code ), 'detail' => $detail );
 		}
 
 	}
@@ -470,7 +496,7 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 		printf(
 			'<p class="description">%s</p>',
-			esc_html__( 'The live request is made from this server to itself each time this page loads.', 'noon-focal-retina-image-generator' )
+			esc_html__( 'The live request is made from this server to itself each time this page loads.', 'focal-point-images-smart-crop' )
 		);
 
 	}

@@ -4,30 +4,29 @@
  * @package           Noon_Focal_Retina_Image_Generator
  *
  * @wordpress-plugin
- * Plugin Name:       Focal Retina Image Generator
- * Plugin URI:        https://noon.studio
- * Description:       Focal point picker for images, with on-the-fly focal-cropped, retina and WebP renditions served through Glide.
- * Version:           1.1.0
+ * Plugin Name:       Focal Point Images – Smart Crop, Responsive, Retina & WebP
+ * Description:       Set a focal point on any image and get smart-cropped, responsive, retina and WebP image sizes generated on the fly. No more regenerating thumbnails.
+ * Version:           1.2.1
  * Author:            Studio Noon
  * Author URI:        https://noon.studio
- * License:           GPL-2.0+
- * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
- * Requires at least: 6.0
+ * License:           GPLv2 or later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Requires at least: 6.4
  * Requires PHP:      8.0
  * Network:           true
- * Text Domain:       noon-focal-retina-image-generator
+ * Text Domain:       focal-point-images-smart-crop
  */
 
 if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION', '1.1.0' );
+define( 'NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION', '1.2.1' );
 
 if ( ! file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	add_action( 'admin_notices', function () {
 		echo '<div class="notice notice-error"><p>'
-			. esc_html__( 'Focal Retina Image Generator: run "composer install" in the plugin directory.', 'noon-focal-retina-image-generator' )
+			. esc_html__( 'Focal Retina Image Generator: run "composer install" in the plugin directory.', 'focal-point-images-smart-crop' )
 			. '</p></div>';
 	} );
 	return;
@@ -47,7 +46,7 @@ register_activation_hook( __FILE__, function () {
 
 register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );
 
-$noon_focal = new Noon_Focal_Retina_Image_Generator_Admin( 'noon-focal-retina-image-generator', NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION );
+$noon_focal = new Noon_Focal_Retina_Image_Generator_Admin( 'focal-point-images-smart-crop', NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION );
 
 // Self-heal the secret file if it was removed or the plugin was deployed without activating.
 add_action( 'admin_init', 'noon_focal_ensure_secret' );
@@ -67,6 +66,12 @@ add_filter( 'intermediate_image_sizes_advanced', array( $noon_focal, 'intermedia
 add_filter( 'image_downsize', array( $noon_focal, 'image_downsize' ), 10, 3 );
 add_filter( 'wp_calculate_image_srcset_meta', array( $noon_focal, 'wp_calculate_image_srcset_meta' ), 10, 4 );
 add_filter( 'wp_calculate_image_srcset', array( $noon_focal, 'wp_calculate_image_srcset' ), 10, 5 );
+// Sizes registered with noon_focal_add_image_size(): width ladder, sizes attribute, <picture> per breakpoint.
+add_filter( 'wp_calculate_image_srcset', array( $noon_focal, 'responsive_srcset' ), 20, 5 );
+add_filter( 'wp_calculate_image_sizes', array( $noon_focal, 'responsive_sizes_attr' ), 10, 5 );
+add_filter( 'wp_get_attachment_image', array( $noon_focal, 'picture_wrap' ), 10, 5 );
+// Re-sign <img> tags saved in block content so they follow the current focal point.
+add_filter( 'wp_content_img_tag', array( $noon_focal, 'content_img_tag' ), 20, 3 );
 
 // Purge Glide's cache when the focal point changes or the attachment is deleted.
 foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $noon_focal_hook ) {

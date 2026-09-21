@@ -1,0 +1,11 @@
+.DS_Store
+.git
+.gitignore
+.distignore
+.claude
+node_modules
+package-lock.json
+package.json
+admin/src
+README.md
+*.zip

@@ -31,7 +31,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			self::META,
 			array(
 				'type'              => 'object',
-				'description'       => __( 'Focal point of the image, as fractions of width and height (0–1).', 'noon-focal-retina-image-generator' ),
+				'description'       => __( 'Focal point of the image, as fractions of width and height (0–1).', 'focal-point-images-smart-crop' ),
 				'single'            => true,
 				'sanitize_callback' => array( __CLASS__, 'sanitize_focus' ),
 				'auth_callback'     => function ( $allowed, $meta_key, $post_id ) {
@@ -86,8 +86,11 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		if ( ! is_array( $focus ) || ( ! isset( $focus['x'], $focus['y'] ) && ! isset( $focus[0], $focus[1] ) ) ) {
 			/**
 			 * Default focal point for images without one, as [x, y] fractions (0–1).
+			 *
+			 * @param array $focus         [x, y].
+			 * @param int   $attachment_id
 			 */
-			$focus = apply_filters( 'default_focus', array( 0.5, 0.5 ), $attachment_id );
+			$focus = apply_filters( 'noon_focal_default_focus', array( 0.5, 0.5 ), $attachment_id );
 		}
 
 		return self::sanitize_focus( $focus );
@@ -116,10 +119,11 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		$focus = self::get_focus( $post->ID );
+		$meta  = wp_get_attachment_metadata( $post->ID );
 
 		ob_start();
 		?>
-		<div class="Noon_Focal_Retina_Container">
+		<div class="Noon_Focal_Retina_Container" data-width="<?php echo (int) ( $meta['width'] ?? 0 ); ?>" data-height="<?php echo (int) ( $meta['height'] ?? 0 ); ?>">
 			<div class="focal-preview">
 				<?php echo wp_get_attachment_image( $post->ID, 'full', false, array( 'class' => 'img-fluid preview', 'draggable' => 'false' ) ); ?>
 				<img
@@ -133,17 +137,25 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			</div>
 
 			<button type="button" class="noon_edit_focalpoint button" data-attachment-id="<?php echo esc_attr( $post->ID ); ?>">
-				<?php esc_html_e( 'Edit Focal Point', 'noon-focal-retina-image-generator' ); ?>
+				<?php esc_html_e( 'Edit Focal Point', 'focal-point-images-smart-crop' ); ?>
 			</button>
 
 			<div class="Noon_Focal_Retina_Image_Generator_Template hidden">
-				<div class="Noon_Focal_Retina_Image_Generator_Dialog" style="max-width:800px;">
-					<div class="Noon_Focal_Retina_Image_Generator_Wrapper">
-						<?php echo wp_get_attachment_image( $post->ID, 'full' ); ?>
+				<div class="Noon_Focal_Retina_Image_Generator_Dialog">
+					<div class="noon-focal-editor">
+						<div class="noon-focal-editor__stage">
+							<div class="Noon_Focal_Retina_Image_Generator_Wrapper">
+								<div class="noon-focal-stage-img"><?php echo wp_get_attachment_image( $post->ID, 'full' ); ?></div>
+							</div>
+							<p class="description"><?php esc_html_e( 'Click or drag the point to the most important part of the image. The crops follow it live; nothing is generated or saved until you apply.', 'focal-point-images-smart-crop' ); ?></p>
+						</div>
+						<div class="noon-focal-editor__previews Noon_Focal_Retina_Image_Generator_Previews noon-focal-size-previews noon-focal-size-previews--grid" data-src="<?php echo esc_url( wp_get_attachment_image_url( $post->ID, 'full' ) ); ?>">
+							<div class="previews noon-focal-size-previews__grid"></div>
+						</div>
 					</div>
 					<div class="actions">
-						<button type="button" class="button cancel"><?php esc_html_e( 'Cancel', 'noon-focal-retina-image-generator' ); ?></button>
-						<button type="button" class="button apply"><?php esc_html_e( 'Apply', 'noon-focal-retina-image-generator' ); ?></button>
+						<button type="button" class="button cancel"><?php esc_html_e( 'Cancel', 'focal-point-images-smart-crop' ); ?></button>
+						<button type="button" class="button apply"><?php esc_html_e( 'Apply', 'focal-point-images-smart-crop' ); ?></button>
 					</div>
 				</div>
 			</div>
@@ -155,17 +167,17 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		$fields = array(
 			self::META . '_y' => array(
 				'input' => 'hidden',
-				'label' => __( 'Focal Point Y', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Focal Point Y', 'focal-point-images-smart-crop' ),
 				'value' => $focus['y'],
 			),
 			self::META . '_x' => array(
 				'input' => 'hidden',
-				'label' => __( 'Focal Point X', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Focal Point X', 'focal-point-images-smart-crop' ),
 				'value' => $focus['x'],
 			),
 			self::META        => array(
 				'input' => 'html',
-				'label' => __( 'Focal Point Picker', 'noon-focal-retina-image-generator' ),
+				'label' => __( 'Focal Point Picker', 'focal-point-images-smart-crop' ),
 				'html'  => $html,
 			),
 		) + $fields;
@@ -212,6 +224,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			$asset['version'],
 			true
 		);
+		wp_set_script_translations( $handle, 'focal-point-images-smart-crop' );
 
 		if ( $style_file && file_exists( $build . $style_file ) ) {
 			wp_enqueue_style( $handle, $url . $style_file, $style_deps, $asset['version'] );
@@ -221,18 +234,21 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 
 	public function editor_assets() {
 		$this->enqueue_built_asset( $this->plugin_name, 'index', array(), 'index.css', array( 'wp-edit-blocks' ) );
+		$this->localize_preview_sizes( $this->plugin_name );
 	}
 
-	public function admin_assets() {
+	/**
+	 * @param string $hook_suffix Current admin page, from admin_enqueue_scripts.
+	 */
+	public function admin_assets( $hook_suffix = '' ) {
 
 		/**
 		 * Whether to load the media-modal focal point picker on the current admin screen.
-		 * Defaults to everywhere except the events hub's "event-wizard" page.
+		 *
+		 * @param bool   $load
+		 * @param string $hook_suffix
 		 */
-		$load = apply_filters(
-			'noon_focal_enqueue_media_assets',
-			'event-wizard' !== sanitize_key( $_GET['page'] ?? '' )
-		);
+		$load = apply_filters( 'noon_focal_enqueue_media_assets', true, (string) $hook_suffix );
 
 		if ( ! $load ) {
 			return;
@@ -245,6 +261,57 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			'style-media.css',
 			array( 'wp-jquery-ui-dialog' )
 		);
+
+		$this->localize_preview_sizes( $this->plugin_name . '_media' );
+
+	}
+
+	/**
+	 * Expose the boxes the pickers preview to a script as window.noonFocalPreview.
+	 */
+	private function localize_preview_sizes( $handle ) {
+		wp_add_inline_script(
+			$handle,
+			'window.noonFocalPreview = ' . wp_json_encode( array( 'sizes' => self::preview_sizes() ) ) . ';',
+			'before'
+		);
+	}
+
+	/**
+	 * Boxes shown as live crop previews under the focal point pickers: every
+	 * registered size that crops (uncropped sizes keep the whole image, so the
+	 * point makes no difference to them) and every responsive breakpoint box.
+	 *
+	 * @return array[] Each ['label' => string, 'w' => int, 'h' => int].
+	 */
+	public static function preview_sizes() {
+
+		$sizes = array();
+
+		foreach ( noon_focal_registered_sizes() as $name => $box ) {
+			if ( $box['crop'] && $box['w'] > 0 && $box['h'] > 0 ) {
+				$sizes[] = array( 'label' => $name, 'w' => $box['w'], 'h' => $box['h'] );
+			}
+		}
+
+		foreach ( noon_focal_responsive_sizes() as $name => $config ) {
+			foreach ( $config['breakpoints'] as $min_width => $box ) {
+				if ( $box['crop'] && $box['w'] > 0 && $box['h'] > 0 ) {
+					$sizes[] = array(
+						'label' => $min_width > 0 ? sprintf( '%s ≥%dpx', $name, $min_width ) : $name,
+						'w'     => $box['w'],
+						'h'     => $box['h'],
+					);
+				}
+			}
+		}
+
+		/**
+		 * Boxes previewed under the focal point pickers.
+		 *
+		 * @param array[] $sizes Each ['label' => string, 'w' => int, 'h' => int].
+		 */
+		return apply_filters( 'noon_focal_preview_sizes', $sizes );
 
 	}
 
@@ -303,9 +370,9 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		echo '<div class="notice notice-error"><p><strong>'
-			. esc_html__( 'Focal Retina Image Generator: images are not being served through Glide.', 'noon-focal-retina-image-generator' )
+			. esc_html__( 'Focal Retina Image Generator: images are not being served through Glide.', 'focal-point-images-smart-crop' )
 			. '</strong> '
-			. esc_html__( 'WordPress does not manage .htaccess on multisite. Add this block near the top of your .htaccess, before the RewriteCond %{REQUEST_FILENAME} -f rule:', 'noon-focal-retina-image-generator' )
+			. esc_html__( 'WordPress does not manage .htaccess on multisite. Add this block near the top of your .htaccess, before the RewriteCond %{REQUEST_FILENAME} -f rule:', 'focal-point-images-smart-crop' )
 			. '</p><pre style="overflow:auto;padding:8px;background:#f6f7f7">' . esc_html( self::htaccess_rules() ) . '</pre></div>';
 
 	}
@@ -356,6 +423,95 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		$url = noon_focal_glide_url( $attachment_id, $params );
 
 		return $url ? array( $url, $params['w'], $params['h'], true ) : $out;
+
+	}
+
+	/**
+	 * Image and Media & Text blocks save a static <img src> at insert time, so
+	 * a focal point set afterwards would never reach it. Re-sign src/srcset for
+	 * every wp-image-{id} tag in content at render time, keeping the size the
+	 * block chose. Full-size originals (no size in the URL) are left alone.
+	 */
+	public function content_img_tag( $image, $context, $attachment_id ) {
+
+		if ( ! $attachment_id || ! class_exists( 'WP_HTML_Tag_Processor' ) || ! wp_attachment_is_image( $attachment_id ) ) {
+			return $image;
+		}
+
+		$tag = new WP_HTML_Tag_Processor( $image );
+
+		if ( ! $tag->next_tag( 'img' ) ) {
+			return $image;
+		}
+
+		$src = (string) $tag->get_attribute( 'src' );
+
+		// Blocks add a size-{name} class; a responsive size needs its name, not just its box.
+		$size = $this->responsive_size_from_class( (string) $tag->get_attribute( 'class' ) );
+		$size = $size ?: $this->size_from_url( $src );
+
+		if ( ! $size || ! noon_focal_is_raster( wp_parse_url( $src, PHP_URL_PATH ) ) ) {
+			return $image;
+		}
+
+		$fresh = wp_get_attachment_image_src( $attachment_id, $size );
+
+		if ( ! $fresh || ( $fresh[0] === $src && ! is_string( $size ) ) ) {
+			return $image;
+		}
+
+		$tag->set_attribute( 'src', $fresh[0] );
+
+		$srcset = wp_get_attachment_image_srcset( $attachment_id, $size );
+
+		if ( $srcset ) {
+			$tag->set_attribute( 'srcset', $srcset );
+			if ( ! $tag->get_attribute( 'sizes' ) ) {
+				$tag->set_attribute( 'sizes', wp_get_attachment_image_sizes( $attachment_id, $size ) );
+			}
+		} else {
+			$tag->remove_attribute( 'srcset' );
+		}
+
+		$image = $tag->get_updated_html();
+
+		// Breakpoint sizes get their <picture> here too (no-op for the rest).
+		return is_string( $size ) ? $this->picture_wrap( $image, $attachment_id, $size ) : $image;
+
+	}
+
+	/**
+	 * Name of the responsive size named by a size-{name} class, or null.
+	 */
+	private function responsive_size_from_class( $class ) {
+
+		if ( ! preg_match( '/(?:^|\s)size-([\w-]+)(?:\s|$)/', $class, $m ) ) {
+			return null;
+		}
+
+		return noon_focal_responsive_size( $m[1] ) ? $m[1] : null;
+
+	}
+
+	/**
+	 * The box an upload URL was rendered at: Glide's ?w=&h=, or the -WxH suffix
+	 * of a size WordPress generated before the plugin. Null for an original.
+	 */
+	private function size_from_url( $url ) {
+
+		$parts = wp_parse_url( $url );
+
+		parse_str( $parts['query'] ?? '', $query );
+
+		if ( ! empty( $query['w'] ) && ! empty( $query['h'] ) ) {
+			return array( 'w' => (int) $query['w'], 'h' => (int) $query['h'], 'crop' => true );
+		}
+
+		if ( preg_match( '/-(\d+)x(\d+)\.[a-z0-9]+$/i', $parts['path'] ?? '', $m ) ) {
+			return array( 'w' => (int) $m[1], 'h' => (int) $m[2], 'crop' => true );
+		}
+
+		return null;
 
 	}
 
@@ -430,6 +586,185 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		return $sources;
+
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Responsive sizes (noon_focal_add_image_size)
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * For a responsive size without breakpoints, replace the dpr candidates
+	 * with the size's width ladder (w descriptors). The filter only sees [w, h],
+	 * so the size is identified by matching that box against each responsive
+	 * size's resolved dimensions for this attachment; the first match wins.
+	 */
+	public function responsive_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
+
+		if ( ! is_array( $sources ) || ! noon_focal_responsive_sizes() ) {
+			return $sources;
+		}
+
+		$name = $this->responsive_size_for_box( $attachment_id, $size_array );
+
+		if ( ! $name ) {
+			return $sources;
+		}
+
+		$candidates = noon_focal_responsive_candidates( $attachment_id, $name );
+
+		if ( ! $candidates ) {
+			return $sources;
+		}
+
+		$fit     = self::get_fit( $attachment_id );
+		$sources = array();
+
+		foreach ( $candidates as $box ) {
+			$sources[ $box['w'] ] = array(
+				'url'        => noon_focal_glide_url( $attachment_id, array( 'w' => $box['w'], 'h' => $box['h'], 'fit' => $fit ) ),
+				'descriptor' => 'w',
+				'value'      => $box['w'],
+			);
+		}
+
+		return $sources;
+
+	}
+
+	/**
+	 * The configured sizes attribute of a responsive size, when it has one;
+	 * otherwise core's default "(max-width: Wpx) 100vw, Wpx" stands. Only used
+	 * when the caller passed no 'sizes' attr. wp_get_attachment_image() passes
+	 * the [w, h] box here rather than the name, so both are accepted.
+	 */
+	public function responsive_sizes_attr( $sizes, $size, $image_src, $image_meta, $attachment_id ) {
+
+		if ( is_array( $size ) ) {
+			$size = $this->responsive_size_for_box( $attachment_id, $size );
+		}
+
+		$config = $size ? noon_focal_responsive_size( $size ) : null;
+
+		return ( $config && '' !== $config['sizes'] ) ? $config['sizes'] : $sizes;
+
+	}
+
+	/**
+	 * Wrap the <img> of a responsive size that has breakpoints in a <picture>,
+	 * with a <source> per breakpoint at every dpr. The <img> keeps its base box
+	 * and dpr srcset and serves viewports below the smallest breakpoint.
+	 */
+	public function picture_wrap( $html, $attachment_id, $size, $icon = false, $attr = array() ) {
+
+		$config = noon_focal_responsive_size( $size );
+
+		if ( ! $config || ! $config['breakpoints'] || ! is_string( $html ) || false === stripos( $html, '<img' ) ) {
+			return $html;
+		}
+
+		if ( ! wp_attachment_is_image( $attachment_id ) || ! noon_focal_is_raster( get_post_meta( $attachment_id, '_wp_attached_file', true ) ) ) {
+			return $html;
+		}
+
+		$sources = $this->picture_sources( $attachment_id, $config['breakpoints'] );
+
+		return $sources ? '<picture>' . $sources . $html . '</picture>' : $html;
+
+	}
+
+	/**
+	 * <source> tags for breakpoint boxes, largest viewport first so the browser
+	 * takes the first matching media query.
+	 */
+	private function picture_sources( $attachment_id, array $breakpoints ) {
+
+		$meta = wp_get_attachment_metadata( $attachment_id );
+		$max  = (int) ( $meta['width'] ?? 0 );
+		$fit  = self::get_fit( $attachment_id );
+		$html = '';
+
+		krsort( $breakpoints, SORT_NUMERIC );
+
+		foreach ( $breakpoints as $min_width => $box ) {
+
+			if ( $min_width < 1 ) {
+				continue; // The 0 breakpoint is the <img> itself.
+			}
+
+			$dims = noon_focal_dimensions( $attachment_id, $box );
+
+			if ( ! $dims || $dims['w'] < 1 || $dims['h'] < 1 ) {
+				continue;
+			}
+
+			$srcset = array();
+
+			foreach ( self::dprs() as $dpr ) {
+
+				if ( 1 != $dpr && $max > 0 && round( $dims['w'] * $dpr ) > $max ) {
+					continue;
+				}
+
+				$params = array( 'w' => $dims['w'], 'h' => $dims['h'], 'fit' => $fit );
+				if ( 1 != $dpr ) {
+					$params['dpr'] = $dpr;
+				}
+
+				$url = noon_focal_glide_url( $attachment_id, $params );
+
+				if ( $url ) {
+					$srcset[] = $url . ' ' . rtrim( rtrim( number_format( $dpr, 2, '.', '' ), '0' ), '.' ) . 'x';
+				}
+
+			}
+
+			if ( ! $srcset ) {
+				continue;
+			}
+
+			$html .= sprintf(
+				'<source media="(min-width: %dpx)" srcset="%s" width="%d" height="%d">',
+				(int) $min_width,
+				esc_attr( implode( ', ', $srcset ) ),
+				$dims['w'],
+				$dims['h']
+			);
+
+		}
+
+		return $html;
+
+	}
+
+	/**
+	 * Name of the first responsive size (without breakpoints) whose resolved
+	 * box for this attachment equals [w, h], or null.
+	 */
+	private function responsive_size_for_box( $attachment_id, $size_array ) {
+
+		$w = (int) ( $size_array[0] ?? 0 );
+		$h = (int) ( $size_array[1] ?? 0 );
+
+		if ( $w < 1 || $h < 1 ) {
+			return null;
+		}
+
+		foreach ( noon_focal_responsive_sizes() as $name => $config ) {
+
+			if ( $config['breakpoints'] ) {
+				continue;
+			}
+
+			$box = noon_focal_dimensions( $attachment_id, noon_focal_responsive_base( $name ) );
+
+			if ( $box && $box['w'] === $w && $box['h'] === $h ) {
+				return $name;
+			}
+
+		}
+
+		return null;
 
 	}
 

@@ -1,0 +1,29 @@
+.noon-focal-modal {
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.noon-focal-editor {
+		flex: 1 1 auto;
+		min-height: 0;
+	}
+
+	// Let the picker use the column: core caps it at a fixed width otherwise.
+	.components-focal-point-picker-wrapper,
+	.components-focal-point-picker__media-wrapper {
+		max-width: 100%;
+	}
+
+	.components-focal-point-picker_position-display-container {
+		margin-top: 8px;
+	}
+
+	&__actions {
+		flex: 0 0 auto;
+		margin-top: 16px;
+		padding-top: 12px;
+		border-top: 1px solid #ddd;
+	}
+}

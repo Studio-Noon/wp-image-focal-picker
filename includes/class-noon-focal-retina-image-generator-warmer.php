@@ -75,6 +75,21 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 		 */
 		$sizes = apply_filters( 'noon_focal_warm_sizes', $sizes, $attachment_id );
 
+		// Responsive sizes: breakpoint boxes go through the dpr loop like any size;
+		// width-ladder candidates are already at their final width so get formats only.
+		$fixed = array();
+
+		foreach ( noon_focal_responsive_sizes() as $name => $config ) {
+			foreach ( $config['breakpoints'] as $min_width => $box ) {
+				if ( $min_width > 0 ) {
+					$sizes[] = $box;
+				}
+			}
+			foreach ( noon_focal_responsive_candidates( $attachment_id, $name ) as $box ) {
+				$fixed[] = $box + array( 'crop' => true );
+			}
+		}
+
 		$formats = array( noon_focal_default_params( $file, false ) );
 		if ( noon_focal_webp_supported() ) {
 			$formats[] = noon_focal_default_params( $file, true );
@@ -109,6 +124,22 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 			}
 
 		}
+
+		foreach ( $fixed as $box ) {
+
+			$params = noon_focal_image_params( $attachment_id, $box );
+
+			if ( ! $params ) {
+				continue;
+			}
+
+			foreach ( $formats as $format ) {
+				$variants[] = array_merge( $format, $params );
+			}
+
+		}
+
+		$variants = array_values( array_unique( $variants, SORT_REGULAR ) );
 
 		return apply_filters( 'noon_focal_warm_variants', $variants, $attachment_id );
 
@@ -147,7 +178,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 				$server->makeImage( $file, $params );
 				$count++;
 			} catch ( Throwable $e ) {
-				error_log( sprintf( 'noon-focal-retina-image-generator: could not warm #%d (%s): %s', $attachment_id, http_build_query( $params ), $e->getMessage() ) );
+				wp_trigger_error( __METHOD__, sprintf( 'could not warm #%d (%s): %s', $attachment_id, http_build_query( $params ), $e->getMessage() ) );
 			}
 		}
 
@@ -222,18 +253,24 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 
 	}
 
+	/**
+	 * Next batch of image attachment IDs after a cursor. A keyset query rather
+	 * than WP_Query with an offset, so a library that changes while the cron
+	 * batches run is neither skipped over nor re-walked.
+	 */
 	private function image_ids( $after_id, $limit ) {
 		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off cursor walk from a cron batch; nothing to cache.
 		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare(
-			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%%' AND ID > %d ORDER BY ID ASC LIMIT %d",
+			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE %s AND ID > %d ORDER BY ID ASC LIMIT %d",
+			$wpdb->esc_like( 'image/' ) . '%',
 			$after_id,
 			$limit
 		) ) );
 	}
 
 	private function count_images() {
-		global $wpdb;
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%'" );
+		return (int) array_sum( (array) wp_count_attachments( 'image' ) );
 	}
 
 	/* ---------------------------------------------------------------------
@@ -241,7 +278,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 	 * ------------------------------------------------------------------ */
 
 	public function bulk_action( $actions ) {
-		$actions[ self::BULK_ACTION ] = __( 'Warm image cache', 'noon-focal-retina-image-generator' );
+		$actions[ self::BULK_ACTION ] = __( 'Warm image cache', 'focal-point-images-smart-crop' );
 		return $actions;
 	}
 
@@ -268,7 +305,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 
 		add_settings_section(
 			'noon_focal_cache',
-			__( 'Image cache', 'noon-focal-retina-image-generator' ),
+			__( 'Image cache', 'focal-point-images-smart-crop' ),
 			array( $this, 'render_settings_section' ),
 			'media'
 		);
@@ -284,8 +321,10 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 			printf(
 				'<p>%s</p>',
 				$running
-					? sprintf( esc_html__( 'Warming in progress: %1$d of %2$d images done.', 'noon-focal-retina-image-generator' ), $progress['done'], $progress['total'] )
-					: sprintf( esc_html__( 'Last run finished %1$s ago (%2$d images).', 'noon-focal-retina-image-generator' ), human_time_diff( $progress['finished'] ), $progress['done'] )
+					/* translators: 1: images done, 2: total images */
+					? sprintf( esc_html__( 'Warming in progress: %1$d of %2$d images done.', 'focal-point-images-smart-crop' ), (int) $progress['done'], (int) $progress['total'] )
+					/* translators: 1: human-readable time span, 2: number of images */
+					: sprintf( esc_html__( 'Last run finished %1$s ago (%2$d images).', 'focal-point-images-smart-crop' ), esc_html( human_time_diff( (int) $progress['finished'] ) ), (int) $progress['done'] )
 			);
 		}
 
@@ -294,9 +333,9 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 			'<p><a class="button" href="%s">%s</a></p><p class="description">%s</p>',
 			esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=' . self::ADMIN_ACTION ), self::ADMIN_ACTION ) ),
 			$running
-				? esc_html__( 'Restart warming', 'noon-focal-retina-image-generator' )
-				: esc_html__( 'Warm cache for all images', 'noon-focal-retina-image-generator' ),
-			esc_html__( 'Pre-builds every registered size (1x, 1.5x, 2x, native and WebP) for every image in the background via WP-Cron. Already-cached renditions are skipped.', 'noon-focal-retina-image-generator' )
+				? esc_html__( 'Restart warming', 'focal-point-images-smart-crop' )
+				: esc_html__( 'Warm cache for all images', 'focal-point-images-smart-crop' ),
+			esc_html__( 'Pre-builds every registered size (1x, 1.5x, 2x, native and WebP) for every image in the background via WP-Cron. Already-cached renditions are skipped.', 'focal-point-images-smart-crop' )
 		);
 
 	}
@@ -304,7 +343,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 	public function handle_warm_all() {
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do that.', 'noon-focal-retina-image-generator' ) );
+			wp_die( esc_html__( 'You are not allowed to do that.', 'focal-point-images-smart-crop' ) );
 		}
 
 		check_admin_referer( self::ADMIN_ACTION );
@@ -316,22 +355,32 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 
 	}
 
+	/**
+	 * Success notices after the bulk action / "warm all" redirects. The flags
+	 * only choose a message, so they are read without a nonce.
+	 */
 	public function notices() {
 
-		if ( isset( $_GET['noon_focal_warmed'] ) ) {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$warmed  = isset( $_GET['noon_focal_warmed'] ) ? absint( wp_unslash( $_GET['noon_focal_warmed'] ) ) : 0;
+		$started = isset( $_GET['noon_focal_warm_started'] );
+		// phpcs:enable
+
+		if ( $warmed ) {
 			printf(
 				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
 				esc_html( sprintf(
-					_n( '%d image queued for cache warming.', '%d images queued for cache warming.', (int) $_GET['noon_focal_warmed'], 'noon-focal-retina-image-generator' ),
-					(int) $_GET['noon_focal_warmed']
+					/* translators: %d: number of images */
+					_n( '%d image queued for cache warming.', '%d images queued for cache warming.', $warmed, 'focal-point-images-smart-crop' ),
+					$warmed
 				) )
 			);
 		}
 
-		if ( isset( $_GET['noon_focal_warm_started'] ) ) {
+		if ( $started ) {
 			printf(
 				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
-				esc_html__( 'Cache warming started. It runs in the background; reload this page to see progress.', 'noon-focal-retina-image-generator' )
+				esc_html__( 'Cache warming started. It runs in the background; reload this page to see progress.', 'focal-point-images-smart-crop' )
 			);
 		}
 
