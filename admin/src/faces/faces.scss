@@ -1,0 +1,91 @@
+// Face boxes over the picker image, and face-kept/cut badges on the previews.
+// Shared by the block-editor components and the media-modal dialog.
+.noon-focal-faces {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+
+	span {
+		position: absolute;
+		box-sizing: border-box;
+		border: 2px solid #fff;
+		outline: 1px solid rgba(0, 0, 0, 0.5);
+		outline-offset: -3px;
+		border-radius: 2px;
+		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+	}
+
+	&__remove {
+		position: absolute;
+		top: 0;
+		right: 0;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		border: 1px solid #fff;
+		border-radius: 50%;
+		background: #1e1e1e;
+		color: #fff;
+		font-size: 20px;
+		line-height: 1;
+		cursor: pointer;
+		pointer-events: auto;
+
+		&:hover {
+			background: #b32d2e;
+		}
+
+		&:focus-visible {
+			outline: 2px solid #2271b1;
+			outline-offset: 2px;
+		}
+	}
+}
+
+.noon-focal-face-suggest {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+
+	.description {
+		margin: 0;
+	}
+}
+
+.noon-focal-face-badge {
+	position: absolute;
+	top: 4px;
+	left: 4px;
+	padding: 1px 5px;
+	border-radius: 2px;
+	font-size: 10px;
+	line-height: 1.5;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.7);
+	pointer-events: none;
+
+	&--kept {
+		background: #00803e;
+	}
+
+	&--tight {
+		background: #b26200;
+	}
+
+	&--out {
+		background: #646970;
+	}
+
+	&--cut {
+		background: #cc1818;
+	}
+}

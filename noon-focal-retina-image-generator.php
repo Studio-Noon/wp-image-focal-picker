@@ -6,7 +6,7 @@
  * @wordpress-plugin
  * Plugin Name:       Focal Point Images – Smart Crop, Responsive, Retina & WebP
  * Description:       Set a focal point on any image and get smart-cropped, responsive, retina and WebP image sizes generated on the fly. No more regenerating thumbnails.
- * Version:           1.2.1
+ * Version:           1.3.0
  * Author:            Studio Noon
  * Author URI:        https://noon.studio
  * License:           GPLv2 or later
@@ -21,7 +21,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION', '1.2.1' );
+define( 'NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION', '1.3.0' );
 
 if ( ! file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	add_action( 'admin_notices', function () {
@@ -48,7 +48,7 @@ register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );
 
 $noon_focal = new Noon_Focal_Retina_Image_Generator_Admin( 'focal-point-images-smart-crop', NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION );
 
-// Self-heal the secret file if it was removed or the plugin was deployed without activating.
+// Self-heal the secret mirror if it was removed or the plugin was deployed without activating.
 add_action( 'admin_init', 'noon_focal_ensure_secret' );
 
 add_action( 'init', array( $noon_focal, 'register_meta' ) );

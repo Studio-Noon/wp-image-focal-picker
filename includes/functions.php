@@ -12,7 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 use League\Glide\Urls\UrlBuilderFactory;
 
 /**
- * Signed, absolute Glide URL for an attachment's original file.
+ * Glide URL for an attachment's original file, signed when a secret is
+ * available and unsigned otherwise — see includes/config.php.
  *
  * @param int   $attachment_id
  * @param array $params Glide parameters (w, h, fit, dpr, fm, q…).
@@ -24,13 +25,15 @@ function noon_focal_glide_url( $attachment_id, array $params ) {
 
 	$file = get_post_meta( $attachment_id, '_wp_attached_file', true );
 
-	if ( ! $file || ! noon_focal_is_raster( $file ) || ! defined( 'NOON_IMAGE_SECRET' ) ) {
+	if ( ! $file || ! noon_focal_is_raster( $file ) ) {
 		return '';
 	}
 
 	if ( null === $builder ) {
 		// Glide signs only the path component, which is what media.php checks.
-		$builder = UrlBuilderFactory::create( wp_get_upload_dir()['baseurl'], NOON_IMAGE_SECRET );
+		$builder = defined( 'NOON_IMAGE_SECRET' )
+			? UrlBuilderFactory::create( wp_get_upload_dir()['baseurl'], NOON_IMAGE_SECRET )
+			: UrlBuilderFactory::create( wp_get_upload_dir()['baseurl'] );
 	}
 
 	return $builder->getUrl( $file, $params );

@@ -1,29 +1,71 @@
+@import './coordinates';
+
 .noon-focal-modal {
-	.components-modal__content {
-		display: flex;
-		flex-direction: column;
-		min-height: 0;
-	}
+  // Keep the core header, then fill the remaining frame with body + footer.
+  &.components-modal__frame .components-modal__content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-bottom: 0;
+    padding: 0;
+    overflow: hidden;
+  }
 
-	.noon-focal-editor {
-		flex: 1 1 auto;
-		min-height: 0;
-	}
+  .components-modal__header {
+    border-bottom-color: #dcdcde;
+  }
 
-	// Let the picker use the column: core caps it at a fixed width otherwise.
-	.components-focal-point-picker-wrapper,
-	.components-focal-point-picker__media-wrapper {
-		max-width: 100%;
-	}
+  // WordPress wraps the supplied children. Carry the bounded frame height
+  // through this wrapper so the editor can overflow above the footer.
+  .components-modal__children-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
 
-	.components-focal-point-picker_position-display-container {
-		margin-top: 8px;
-	}
+  &__layout {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
 
-	&__actions {
-		flex: 0 0 auto;
-		margin-top: 16px;
-		padding-top: 12px;
-		border-top: 1px solid #ddd;
-	}
+  .noon-focal-editor {
+    min-height: 0;
+    margin: 24px;
+  }
+
+  // Let the picker use the column: core caps it at a fixed width otherwise.
+  .components-focal-point-picker-wrapper,
+  .components-focal-point-picker__media-wrapper {
+    max-width: 100%;
+  }
+
+  // The footer controls edit the same draft as the picker.
+  .noon-focal-editor__stage .focal-point-picker__controls,
+  .noon-focal-editor__stage .components-focal-point-picker_position-display-container {
+    display: none;
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin: 0;
+    padding: 16px 24px;
+    border-top: 1px solid #dcdcde;
+    background: #f6f7f7;
+  }
+
+  @media (max-width: 600px) {
+    .noon-focal-editor,
+    .noon-focal-modal__actions {
+      padding: 16px;
+    }
+  }
 }

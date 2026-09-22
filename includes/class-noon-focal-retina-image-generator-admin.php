@@ -153,10 +153,16 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 							<div class="previews noon-focal-size-previews__grid"></div>
 						</div>
 					</div>
-					<div class="actions">
+					<footer class="actions">
+						<div class="noon-focal-coordinates">
+							<label><span><?php esc_html_e( 'Left (%)', 'focal-point-images-smart-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="x" /></label>
+							<label><span><?php esc_html_e( 'Top (%)', 'focal-point-images-smart-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="y" /></label>
+						</div>
+						<button type="button" class="button detect-faces"><?php esc_html_e( 'Suggest from faces', 'focal-point-images-smart-crop' ); ?></button>
+						<span class="faces-status description" aria-live="polite"></span>
 						<button type="button" class="button cancel"><?php esc_html_e( 'Cancel', 'focal-point-images-smart-crop' ); ?></button>
 						<button type="button" class="button apply"><?php esc_html_e( 'Apply', 'focal-point-images-smart-crop' ); ?></button>
-					</div>
+					</footer>
 				</div>
 			</div>
 		</div>
@@ -267,14 +273,32 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	}
 
 	/**
-	 * Expose the boxes the pickers preview to a script as window.noonFocalPreview.
+	 * Expose the boxes the pickers preview, and where the face-detection
+	 * weights are, to a script as window.noonFocalPreview.
 	 */
 	private function localize_preview_sizes( $handle ) {
+
+		$models = plugin_dir_path( __DIR__ ) . 'admin/build/models/';
+
+		/**
+		 * Whether the pickers offer "Suggest from faces" (in-browser face
+		 * detection, ~1.5 MB fetched on first use).
+		 *
+		 * @param bool $enabled
+		 */
+		$faces = apply_filters( 'noon_focal_face_detection', true )
+			&& file_exists( $models . 'tiny_face_detector_model-weights_manifest.json' );
+
 		wp_add_inline_script(
 			$handle,
-			'window.noonFocalPreview = ' . wp_json_encode( array( 'sizes' => self::preview_sizes() ) ) . ';',
+			'window.noonFocalPreview = ' . wp_json_encode( array(
+				'sizes'  => self::preview_sizes(),
+				'faces'  => (bool) $faces,
+				'models' => plugin_dir_url( __DIR__ ) . 'admin/build/models',
+			) ) . ';',
 			'before'
 		);
+
 	}
 
 	/**
@@ -320,9 +344,10 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * Rewrite block sending signed upload URLs (?w=&h=&s=) to media.php.
-	 * On a subdirectory multisite the site slug may precede wp-content/, so it
-	 * is matched optionally, mirroring core's own multisite rules.
+	 * Rewrite block sending upload URLs (?w=&h=, plus &s= when the site has a
+	 * signing secret) to media.php. On a subdirectory multisite the site slug
+	 * may precede wp-content/, so it is matched optionally, mirroring core's
+	 * own multisite rules.
 	 */
 	public static function htaccess_rules() {
 
@@ -334,7 +359,9 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		$rule .= 'RewriteCond %{QUERY_STRING} !direct=true' . PHP_EOL;
 		$rule .= 'RewriteCond %{QUERY_STRING} (^|&)w=[0-9]+(&|$)' . PHP_EOL;
 		$rule .= 'RewriteCond %{QUERY_STRING} (^|&)h=[0-9]+(&|$)' . PHP_EOL;
-		$rule .= 'RewriteCond %{QUERY_STRING} (^|&)s=[a-f0-9]+(&|$)' . PHP_EOL;
+		if ( defined( 'NOON_IMAGE_SECRET' ) ) {
+			$rule .= 'RewriteCond %{QUERY_STRING} (^|&)s=[a-f0-9]+(&|$)' . PHP_EOL;
+		}
 		$rule .= 'RewriteRule ^([_0-9a-zA-Z-]+/)?wp-content/uploads/.+\\.[A-Za-z0-9]+$ ' . $target . ' [L]' . PHP_EOL;
 		$rule .= '</IfModule>' . PHP_EOL;
 		$rule .= '# END Focal Retina Image Generator' . PHP_EOL;

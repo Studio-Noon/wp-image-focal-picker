@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "@wordpress/element";
-import { FocalPointPicker, Button } from "@wordpress/components";
+import { Button } from "@wordpress/components";
 import { __ } from "@wordpress/i18n";
 import { useSelect, subscribe, select, dispatch } from "@wordpress/data";
 import { addFilter } from "@wordpress/hooks";
 
-import SizePreviews from "../size-previews";
 import FocalPointModal from "../focal-modal";
+import { FaceSuggest, FocalPicker } from "../faces";
 import "./editor.scss";
 
 const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
@@ -33,6 +33,7 @@ function withFocalPointPicker(OriginalComponent) {
 
     const [focalPoint, setFocalPoint] = useState(savedFocus);
     const [isModalOpen, setModalOpen] = useState(false);
+    const [faces, setFaces] = useState([]);
     const latest = useRef({
       focalPoint: savedFocus,
       saved: savedFocus,
@@ -42,6 +43,7 @@ function withFocalPointPicker(OriginalComponent) {
     // Reset the picker when the image (or its stored point) changes.
     useEffect(() => {
       setFocalPoint(savedFocus);
+      setFaces([]);
       latest.current.saved = savedFocus;
       latest.current.id = featuredImageId;
     }, [featuredImageId, savedFocus.x, savedFocus.y]);
@@ -96,18 +98,22 @@ function withFocalPointPicker(OriginalComponent) {
 
     return (
       <div className="remove_standard_image">
-        <FocalPointPicker
+        <FocalPicker
           label=""
           url={imageMeta.source_url}
           dimensions={{ width: imageMeta.width, height: imageMeta.height }}
           value={focalPoint}
           onChange={setFocalPoint}
+          faces={faces}
+          onFacesChange={setFaces}
         />
-        <SizePreviews
+        <FaceSuggest
           src={imageMeta.source_url}
           width={imageMeta.media_details?.width}
           height={imageMeta.media_details?.height}
-          focus={focalPoint}
+          onFaces={setFaces}
+          faces={faces}
+          onSuggest={setFocalPoint}
         />
         <Button
           variant="secondary"
@@ -123,8 +129,10 @@ function withFocalPointPicker(OriginalComponent) {
             width={imageMeta.media_details?.width}
             height={imageMeta.media_details?.height}
             value={focalPoint}
-            onApply={(point) => {
+            faces={faces}
+            onApply={(point, found) => {
               setFocalPoint(point);
+              setFaces(found);
               setModalOpen(false);
             }}
             onClose={() => setModalOpen(false)}

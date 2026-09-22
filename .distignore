@@ -9,3 +9,5 @@ package.json
 admin/src
 README.md
 *.zip
+webpack.config.js
+vendor/intervention/gif/entrypoint.sh

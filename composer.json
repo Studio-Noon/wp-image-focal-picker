@@ -1,5 +1,5 @@
 {
     "require": {
-        "league/glide": "^2.2"
+        "league/glide": "^4.1"
     }
 }

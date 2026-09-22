@@ -1,0 +1,26 @@
+.noon-focal-coordinates {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-right: auto;
+
+	label {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	input {
+		box-sizing: border-box;
+		width: 76px;
+		min-height: 36px;
+		margin: 0;
+	}
+
+	@media (max-width: 600px) {
+		flex-basis: 100%;
+	}
+}

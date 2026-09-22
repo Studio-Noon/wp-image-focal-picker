@@ -20,7 +20,7 @@ which Apache rewrites to `media.php`. Renditions are cached in `wp-content/cache
   # http {}
   map "$arg_direct:$arg_w:$arg_h:$arg_s" $noon_focal_glide {
       default 0;
-      "~^:[0-9]+:[0-9]+:[a-f0-9]+$" 1;
+      "~^:[0-9]+:[0-9]+:[a-f0-9]*$" 1;
   }
 
   # server {}, before any generic static-file location
@@ -42,7 +42,7 @@ npm run zip                   # optional: ../focal-point-images-smart-crop.zip (
 wp plugin check focal-point-images-smart-crop   # Plugin Check, before a WordPress.org release
 ```
 
-On activation a random signing secret is written to `wp-content/noon-image-secret.php`. Keep it out of version control; deleting it just rotates the key (cached pages then fall back to the original files until they refresh). Defining `NOON_IMAGE_SECRET` in `wp-config.php` is _not_ enough on its own, because `media.php` runs without WordPress.
+On activation (and self-healing on every admin page load) a random signing secret is generated with `wp_generate_password()`, stored in the `noon_focal_signing_secret` network option, and mirrored via `WP_Filesystem` to `wp-content/uploads/.noon-focal-secret` (protected by an `insert_with_markers()` block in `uploads/.htaccess`) so `media.php` — which runs without WordPress and so has no database access — can read it too. If the mirror is ever lost, reloading an admin page regenerates it from the same stored value, so nothing already cached is invalidated. If it can't be written at all (read-only filesystem, etc.), images are just served unsigned instead — `media.php` is then an unauthenticated resize proxy, constrained to raster files already in the uploads directory.
 
 ## Using it in templates
 
@@ -102,6 +102,15 @@ For art direction without a registered size, build a `<picture>` from the same f
 </picture>
 ```
 
+## Suggesting a focal point from faces
+
+Every picker has a **Suggest from faces** button. It runs face detection in the browser ([@vladmandic/face-api](https://github.com/vladmandic/face-api), TinyFaceDetector) and moves the focal point to wherever the most faces stay whole across *every* cropped size — scored per size, so a wide banner and a tall card are both taken into account. Detected faces are outlined on the image, and each crop preview is badged: green when all faces are in, amber when a face is in but its headroom is trimmed, red when a crop cuts through a face. Faces that cannot all fit a size are left out of frame rather than sliced.
+
+The detector (~1.5 MB) and its weights are only fetched on the first click, from the plugin's own `admin/build/` directory; the image never leaves the browser. Nothing is saved until the point is applied as usual.
+
+- `noon_focal_face_detection` — return `false` to hide the button.
+- `npm run build` copies the weights to `admin/build/models/`; without them the button is not shown.
+
 ## Cache warming
 
 Renditions are built on first request. To avoid that hit:
@@ -124,5 +133,6 @@ Already-cached renditions are skipped, so warming is safe to repeat. If your hos
 - `noon_focal_cache_purged` — action fired after an attachment's renditions are purged.
 - `noon_focal_preview_sizes` — `[ [ 'label', 'w', 'h' ], … ]` boxes shown as live crop previews under the pickers. Default: every cropped registered size plus responsive breakpoint boxes.
 - `noon_focal_enqueue_media_assets` — `( bool $load, string $hook_suffix )`; return `false` to keep the media-modal picker off a given admin screen.
+- `noon_focal_face_detection` — `bool`; return `false` to hide "Suggest from faces" in the pickers.
 
 Focal points are stored in attachment meta `noon_focal_point` as `{ x: 0–1, y: 0–1 }` and exposed in the REST API.

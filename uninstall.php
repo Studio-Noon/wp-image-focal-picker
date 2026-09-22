@@ -1,7 +1,7 @@
 <?php
 /**
- * Removes everything the plugin created: focal point meta, the Glide cache and
- * the per-site signing secret.
+ * Removes everything the plugin created: focal point meta, the signing
+ * secret and the Glide cache.
  *
  * @package Noon_Focal_Retina_Image_Generator
  */
@@ -17,14 +17,16 @@ delete_option( 'noon_focal_warm_progress' );
 wp_clear_scheduled_hook( 'noon_focal_warm_batch' );
 wp_unschedule_hook( 'noon_focal_warm_attachment' );
 
-$noon_focal_secret = noon_focal_secret_file();
-if ( file_exists( $noon_focal_secret ) ) {
-	wp_delete_file( $noon_focal_secret );
+delete_site_option( 'noon_focal_signing_secret' );
+
+require_once ABSPATH . 'wp-admin/includes/file.php';
+WP_Filesystem();
+global $wp_filesystem;
+
+if ( $wp_filesystem->exists( noon_focal_secret_file() ) ) {
+	$wp_filesystem->delete( noon_focal_secret_file() );
 }
 
 if ( is_dir( NOON_FOCAL_CACHE_DIR ) ) {
-	require_once ABSPATH . 'wp-admin/includes/file.php';
-	WP_Filesystem();
-	global $wp_filesystem;
 	$wp_filesystem->delete( NOON_FOCAL_CACHE_DIR, true );
 }

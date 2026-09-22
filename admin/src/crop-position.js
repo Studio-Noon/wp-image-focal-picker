@@ -42,6 +42,36 @@ export function cropPosition( imgW, imgH, boxW, boxH, fx, fy ) {
 }
 
 /**
+ * The part of the image Glide keeps for `fit=crop-X-Y`, as fractions of the
+ * image (0–1). Same scale-to-cover and clamped offset as cropPosition(), so
+ * the two always agree.
+ *
+ * @param {number} imgW  Original width.
+ * @param {number} imgH  Original height.
+ * @param {number} boxW  Crop box width.
+ * @param {number} boxH  Crop box height.
+ * @param {number} fx    Focal x, 0–1 from the left.
+ * @param {number} fy    Focal y, 0–1 from the top.
+ * @return {{x: number, y: number, w: number, h: number}} Fractions of the image.
+ */
+export function cropRect( imgW, imgH, boxW, boxH, fx, fy ) {
+	if ( ! imgW || ! imgH || ! boxW || ! boxH ) {
+		return { x: 0, y: 0, w: 1, h: 1 };
+	}
+
+	const scale = Math.max( boxW / imgW, boxH / imgH );
+	const w = Math.min( 1, boxW / scale / imgW );
+	const h = Math.min( 1, boxH / scale / imgH );
+
+	return {
+		x: Math.min( 1 - w, Math.max( 0, fx - w / 2 ) ),
+		y: Math.min( 1 - h, Math.max( 0, fy - h / 2 ) ),
+		w,
+		h,
+	};
+}
+
+/**
  * Boxes to preview, as localized by the plugin (window.noonFocalPreview.sizes).
  *
  * @return {Array<{label: string, w: number, h: number}>}

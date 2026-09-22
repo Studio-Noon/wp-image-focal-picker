@@ -1,116 +1,130 @@
-@import '../size-previews/previews';
+@import "../size-previews/previews";
+@import "../faces/faces";
+@import "../focal-modal/coordinates";
 
-// Full-screen jQuery UI dialog: pinned to the viewport, content is a flex column
-// (editor grows, action buttons stay at the bottom).
-.ui-dialog.noon-focal-dialog{
-    position: fixed !important;
-    top: 16px !important;
-    left: 16px !important;
-    right: 16px !important;
-    bottom: 16px !important;
-    width: auto !important;
+// Full-screen dialog with a separate header, scrollable editor, and footer.
+.ui-dialog.noon-focal-dialog {
+  position: fixed !important;
+  top: 16px !important;
+  left: 16px !important;
+  right: 16px !important;
+  bottom: 16px !important;
+  width: auto !important;
+  height: auto !important;
+  display: flex;
+  flex-direction: column;
+
+  .ui-dialog-titlebar {
+    flex: 0 0 auto;
+  }
+
+  .ui-dialog-content {
+    display: flex;
+    flex: 1 1 0;
     height: auto !important;
-    display: flex;
-    flex-direction: column;
-
-    .ui-dialog-content{
-        flex: 1 1 auto;
-        height: auto !important;
-        min-height: 0;
-        overflow: hidden;
-        padding: 16px;
-    }
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+  }
 }
 
-.Noon_Focal_Retina_Image_Generator_Dialog{
+.Noon_Focal_Retina_Image_Generator_Dialog {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+
+  .noon-focal-editor {
+    box-sizing: border-box;
+    margin: 16px;
+  }
+
+  .actions {
+    background: #f6f7f7;
+    flex-wrap: wrap;
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+
+    // Face detection sits on the left, Cancel / Apply on the right.
+    .faces-status {
+      margin-right: auto;
+      color: #50575e;
+    }
+    margin: 0;
+    padding: 16px;
+    border-top: 1px solid #dcdcde;
+  }
+}
+
+.Noon_Focal_Retina_Container {
+  display: block;
+
+  .focal-preview {
+    display: flex;
     height: 100%;
-    min-height: 0;
-
-    .noon-focal-editor{
-        flex: 1 1 auto;
-    }
-
-    .actions{
-        flex: 0 0 auto;
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        margin-top: 16px;
-        padding-top: 12px;
-        border-top: 1px solid #ddd;
-    }
-}
-
-.Noon_Focal_Retina_Container{
-
-    display: block;
-
-    .focal-preview{
-
-        display: flex;
-        height: 100%;
-        width: 100%;
-        position: relative;
-        margin-bottom: 0.5rem;
-
-        img.preview{
-
-            max-width: 100%;
-            height: auto;
-        }
-
-        img.icon{
-            transform: translate(-50%, -50%);
-            position: absolute;
-            top: 50%;
-            left: 50%;
-
-        }
-
-    }
-
-}
-
-
-.Noon_Focal_Retina_Image_Generator_Wrapper{
-    flex: 0 1 auto;
-    min-height: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
     width: 100%;
+    position: relative;
+    margin-bottom: 0.5rem;
 
-    // image-focus positions its marker relative to the img's parent, so that
-    // parent must hug the image exactly: inline-block shrink-wraps it.
-    .noon-focal-stage-img{
-        display: inline-block;
-        max-width: 100%;
-        line-height: 0;
+    img.preview {
+      min-width: 100%;
+      max-width: 100%;
+      height: auto;
     }
 
-    img{
-        width: auto;
-        height: auto;
-        max-width: 100%;
-        max-height: calc(100vh - 220px);
+    img.icon {
+      transform: translate(-50%, -50%);
+      position: absolute;
+      top: 50%;
+      left: 50%;
     }
-
-    .details-image{
-        margin-bottom: 0 !important;
-    }
+  }
 }
 
-.ui-front{
-    z-index: 160000 !important;
+.Noon_Focal_Retina_Image_Generator_Wrapper {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+
+  // image-focus positions its marker relative to the img's parent, so that
+  // parent must hug the image exactly: inline-block shrink-wraps it.
+  .noon-focal-stage-img {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+  }
+
+  img {
+    max-width: 100%;
+    max-height: calc(100vh - 220px);
+  }
+
+  .details-image {
+    margin-bottom: 0 !important;
+  }
 }
 
-.ui-widget-overlay{
-    z-index: 159999 !important;
-
+// Next to core's "Edit Image" under the picture (see placeButton).
+.attachment-details .attachment-actions .noon_edit_focalpoint {
+  margin-left: 8px;
 }
 
-.media-modal{
-    z-index: 159998 !important;
+.ui-front {
+  z-index: 160000 !important;
+}
+
+.ui-widget-overlay {
+  z-index: 159999 !important;
+}
+
+.media-modal {
+  z-index: 159998 !important;
 }

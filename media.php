@@ -1,20 +1,24 @@
 <?php
 /**
- * Glide endpoint. The web server rewrites signed upload URLs (?w=&h=&s=) here
- * so the image can be resized/cropped/encoded on the fly and cached.
+ * Glide endpoint. The web server rewrites upload URLs (?w=&h=, plus &s= when
+ * the site has a signing secret) here so the image can be resized/cropped/
+ * encoded on the fly and cached.
  *
  * Intentionally does not boot WordPress: every image request passes through
  * this file, cached or not, and loading WordPress for each one would defeat
- * the purpose. Nothing is served unless the request carries a signature that
- * validates against the site's secret, so this file has nothing to offer a
- * direct visitor.
+ * the purpose. When a secret is configured (includes/config.php), nothing is
+ * served without a signature that validates against it; without one, this
+ * endpoint is an unauthenticated resize proxy, constrained to raster files
+ * already inside the uploads directory and Glide's own max_image_size cap.
  *
  * @package Noon_Focal_Retina_Image_Generator
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
-	// Not loaded by WordPress, as intended. Refuse anything that is not a signed request.
-	if ( empty( $_GET['s'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Glide signature, validated below.
+	// Not loaded by WordPress, as intended. Cheaply refuse an empty query
+	// string before loading config.php/vendor; everything else is decided
+	// below, once we know whether the site has a signing secret.
+	if ( '' === (string) ( $_SERVER['QUERY_STRING'] ?? '' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- only tested for emptiness, no WordPress available.
 		http_response_code( 404 );
 		exit;
 	}
@@ -81,18 +85,16 @@ function noon_focal_serve_request() {
 		noon_focal_serve_original( $path, $file_path );
 	}
 
-	if ( ! defined( 'NOON_IMAGE_SECRET' ) ) {
-		// No secret means nothing can be verified; refuse rather than sign with a guess.
-		http_response_code( 503 );
-		exit;
-	}
+	if ( defined( 'NOON_IMAGE_SECRET' ) ) {
 
-	try {
-		SignatureFactory::create( NOON_IMAGE_SECRET )->validateRequest( $path, $params );
-	} catch ( SignatureException $e ) {
-		// Serve the original image if the signature is invalid.
-		noon_focal_serve_original( $path, $file_path );
+		try {
+			SignatureFactory::create( NOON_IMAGE_SECRET )->validateRequest( $path, $params );
+		} catch ( SignatureException $e ) {
+			// Serve the original image if the signature is invalid.
+			noon_focal_serve_original( $path, $file_path );
+		}
 	}
+	// No secret configured: served unsigned (see includes/config.php).
 
 	try {
 

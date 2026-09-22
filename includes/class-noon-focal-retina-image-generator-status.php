@@ -147,11 +147,11 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 		$target = 'wp-content/plugins/' . basename( dirname( __DIR__ ) ) . '/media.php';
 
-		$conf  = "# Focal Retina Image Generator: route signed upload URLs (?w=&h=&s=) to Glide.\n";
+		$conf  = "# Focal Retina Image Generator: route upload URLs (?w=&h=, plus &s= when signed) to Glide.\n";
 		$conf .= "# In the http {} block:\n";
 		$conf .= 'map "$arg_direct:$arg_w:$arg_h:$arg_s" $noon_focal_glide {' . "\n";
 		$conf .= "    default 0;\n";
-		$conf .= '    "~^:[0-9]+:[0-9]+:[a-f0-9]+$" 1;' . "\n";
+		$conf .= '    "~^:[0-9]+:[0-9]+:[a-f0-9]*$" 1;' . "\n";
 		$conf .= "}\n\n";
 		$conf .= "# In the server {} block, before any generic static-file location:\n";
 		$conf .= 'location ~* ^/(?:[_0-9a-zA-Z-]+/)?wp-content/uploads/.+\.[a-z0-9]+$ {' . "\n";
@@ -176,9 +176,9 @@ class Noon_Focal_Retina_Image_Generator_Status {
 		if ( ! defined( 'NOON_IMAGE_SECRET' ) ) {
 			return array(
 				'label' => __( 'Signing secret', 'focal-point-images-smart-crop' ),
-				'state' => 'error',
-				/* translators: %s: secret file path */
-				'text'  => sprintf( __( 'Not available. %s is missing or unreadable; reload this page to regenerate it.', 'focal-point-images-smart-crop' ), $file ),
+				'state' => 'warn',
+				/* translators: %s: secret mirror file path */
+				'text'  => sprintf( __( 'None yet — images are served unsigned. %s could not be written; reload this page to retry.', 'focal-point-images-smart-crop' ), $file ),
 			);
 		}
 
@@ -186,9 +186,9 @@ class Noon_Focal_Retina_Image_Generator_Status {
 			'label' => __( 'Signing secret', 'focal-point-images-smart-crop' ),
 			'state' => file_exists( $file ) ? 'ok' : 'warn',
 			'text'  => file_exists( $file )
-				/* translators: %s: secret file path */
+				/* translators: %s: secret mirror file path */
 				? sprintf( __( 'Loaded from %s', 'focal-point-images-smart-crop' ), $file )
-				: __( 'Defined in wp-config.php only — media.php cannot see that, so signatures will not match. Remove the constant and let the plugin generate the file.', 'focal-point-images-smart-crop' ),
+				: __( 'Set, but not yet mirrored for media.php to read — reload this page to write it.', 'focal-point-images-smart-crop' ),
 		);
 
 	}
@@ -349,10 +349,6 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 		$label = __( 'Live request', 'focal-point-images-smart-crop' );
 
-		if ( ! defined( 'NOON_IMAGE_SECRET' ) ) {
-			return array( 'label' => $label, 'state' => 'error', 'text' => __( 'Skipped: no signing secret.', 'focal-point-images-smart-crop' ) );
-		}
-
 		$id = $this->sample_attachment();
 
 		if ( ! $id ) {
@@ -417,7 +413,7 @@ class Noon_Focal_Retina_Image_Generator_Status {
 					'label'  => $label,
 					'state'  => 'error',
 					'text'   => false !== strpos( (string) $to, 'direct=true' )
-						? __( 'media.php is reached but rejected the signature. The secret WordPress signs with differs from the one media.php reads (wp-content/noon-image-secret.php).', 'focal-point-images-smart-crop' )
+						? __( 'media.php is reached but rejected the signature. The secret WordPress signs with differs from the one media.php reads — reload this page to re-mirror it.', 'focal-point-images-smart-crop' )
 						/* translators: 1: HTTP status, 2: redirect target */
 						: sprintf( __( 'Redirected (%1$d) to %2$s — another rule is intercepting the request.', 'focal-point-images-smart-crop' ), $code, $to ),
 					'detail' => $detail,
@@ -425,9 +421,6 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 			case 404 === $code:
 				return array( 'label' => $label, 'state' => 'error', 'text' => __( '404. Either the rewrite targets the wrong media.php path, or the source file is missing from the uploads directory.', 'focal-point-images-smart-crop' ), 'detail' => $detail );
-
-			case 503 === $code:
-				return array( 'label' => $label, 'state' => 'error', 'text' => __( '503 from media.php: it cannot read the signing secret file.', 'focal-point-images-smart-crop' ), 'detail' => $detail );
 
 			case 500 === $code:
 				return array( 'label' => $label, 'state' => 'error', 'text' => __( '500 from media.php — see the PHP error log for a line starting "focal-point-images-smart-crop:".', 'focal-point-images-smart-crop' ), 'detail' => $detail );

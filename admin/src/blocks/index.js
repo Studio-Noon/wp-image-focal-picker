@@ -9,18 +9,14 @@
 import { createHigherOrderComponent } from "@wordpress/compose";
 import { addFilter } from "@wordpress/hooks";
 import { InspectorControls } from "@wordpress/block-editor";
-import {
-  PanelBody,
-  FocalPointPicker,
-  Spinner,
-  Button,
-} from "@wordpress/components";
+import { PanelBody, Spinner, Button } from "@wordpress/components";
 import { useSelect, useDispatch } from "@wordpress/data";
 import { useState, useEffect, useRef } from "@wordpress/element";
 import { __ } from "@wordpress/i18n";
 
 import SizePreviews from "../size-previews";
 import FocalPointModal from "../focal-modal";
+import { FaceSuggest, FocalPicker } from "../faces";
 
 const META_KEY = "noon_focal_point";
 const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
@@ -60,12 +56,17 @@ function AttachmentFocalPoint({ attachmentId }) {
   const [focalPoint, setFocalPoint] = useState(saved);
   const [status, setStatus] = useState("");
   const [isModalOpen, setModalOpen] = useState(false);
+  const [faces, setFaces] = useState([]);
   const timer = useRef();
 
   // Follow the stored point when the attachment changes or is edited elsewhere.
   useEffect(() => {
     setFocalPoint(saved);
   }, [attachmentId, saved.x, saved.y]);
+
+  useEffect(() => {
+    setFaces([]);
+  }, [attachmentId]);
 
   // Persist a short while after the last drag.
   useEffect(() => {
@@ -121,7 +122,7 @@ function AttachmentFocalPoint({ attachmentId }) {
 
   return (
     <>
-      <FocalPointPicker
+      <FocalPicker
         label=""
         url={media.source_url}
         dimensions={{
@@ -130,6 +131,16 @@ function AttachmentFocalPoint({ attachmentId }) {
         }}
         value={focalPoint}
         onChange={setFocalPoint}
+        faces={faces}
+        onFacesChange={setFaces}
+      />
+      <FaceSuggest
+        src={media.source_url}
+        width={media.media_details?.width}
+        height={media.media_details?.height}
+        onFaces={setFaces}
+        faces={faces}
+        onSuggest={setFocalPoint}
       />
       <p className="description" style={{ minHeight: "1.5em" }}>
         {status
@@ -144,6 +155,7 @@ function AttachmentFocalPoint({ attachmentId }) {
         width={media.media_details?.width}
         height={media.media_details?.height}
         focus={focalPoint}
+        faces={faces}
       />
       <Button
         variant="secondary"
@@ -159,8 +171,10 @@ function AttachmentFocalPoint({ attachmentId }) {
           width={media.media_details?.width}
           height={media.media_details?.height}
           value={focalPoint}
-          onApply={(point) => {
+          faces={faces}
+          onApply={(point, found) => {
             setFocalPoint(point);
+            setFaces(found);
             setModalOpen(false);
           }}
           onClose={() => setModalOpen(false)}
