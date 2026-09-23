@@ -26,7 +26,7 @@ which Apache rewrites to `media.php`. Renditions are cached in `wp-content/cache
   # server {}, before any generic static-file location
   location ~* ^/(?:[_0-9a-zA-Z-]+/)?wp-content/uploads/.+\.[a-z0-9]+$ {
       if ($noon_focal_glide) {
-          rewrite ^ /wp-content/plugins/focal-point-images-smart-crop/media.php last;
+          rewrite ^ /wp-content/plugins/noon-focus-crop/media.php last;
       }
   }
   ```
@@ -38,8 +38,8 @@ _Settings → Media → Focal images — status_ runs a live signed request agai
 ```sh
 composer install --no-dev   # league/glide into vendor/ (git-ignored)
 npm install && npm run build  # only when changing admin/src
-npm run zip                   # optional: ../focal-point-images-smart-crop.zip (.distignore lists what is left out)
-wp plugin check focal-point-images-smart-crop   # Plugin Check, before a WordPress.org release
+npm run zip                   # optional: ../noon-focus-crop.zip (.distignore lists what is left out)
+wp plugin check noon-focus-crop   # Plugin Check, before a WordPress.org release
 ```
 
 On activation (and self-healing on every admin page load) a random signing secret is generated with `wp_generate_password()`, stored in the `noon_focal_signing_secret` network option, and mirrored via `WP_Filesystem` to `wp-content/uploads/.noon-focal-secret` (protected by an `insert_with_markers()` block in `uploads/.htaccess`) so `media.php` — which runs without WordPress and so has no database access — can read it too. If the mirror is ever lost, reloading an admin page regenerates it from the same stored value, so nothing already cached is invalidated. If it can't be written at all (read-only filesystem, etc.), images are just served unsigned instead — `media.php` is then an unauthenticated resize proxy, constrained to raster files already in the uploads directory.

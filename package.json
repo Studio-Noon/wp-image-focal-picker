@@ -1,12 +1,12 @@
 {
-  "name": "focal-point-images-smart-crop",
-  "version": "1.3.0",
+  "name": "noon-focus-crop",
+  "version": "1.3.1",
   "description": "Focal point picker with on-the-fly focal-cropped, retina and WebP images served through Glide.",
   "private": true,
   "scripts": {
     "build": "wp-scripts build admin/src/index.js admin/src/upload/media.js --output-path=admin/build && npm run copy-models",
     "start": "wp-scripts start admin/src/index.js admin/src/upload/media.js --output-path=admin/build",
-    "zip": "find . -name .DS_Store -not -path './node_modules/*' -delete && dir-archiver --src . --dest ../../focal-point-images-smart-crop.zip --exclude .DS_Store vendor/intervention/gif/entrypoint.sh .git .gitignore .distignore .claude node_modules package-lock.json package.json admin/src webpack.config.js README.md",
+    "zip": "find . -name .DS_Store -not -path './node_modules/*' -delete && dir-archiver --src . --dest ../../noon-focus-crop.zip --exclude .DS_Store vendor/intervention/gif/entrypoint.sh .git .gitignore .distignore .claude node_modules package-lock.json package.json admin/src webpack.config.js README.md",
     "copy-models": "mkdir -p admin/build/models && cp node_modules/@vladmandic/face-api/model/tiny_face_detector_model* admin/build/models/ && mv admin/build/models/tiny_face_detector_model.bin admin/build/models/tiny_face_detector_model.dat && sed -i.bak 's/tiny_face_detector_model\\.bin/tiny_face_detector_model.dat/' admin/build/models/tiny_face_detector_model-weights_manifest.json && rm admin/build/models/tiny_face_detector_model-weights_manifest.json.bak"
   },
   "author": "Studio Noon LTD",

@@ -4,9 +4,9 @@
  * @package           Noon_Focal_Retina_Image_Generator
  *
  * @wordpress-plugin
- * Plugin Name:       Focal Point Images – Smart Crop, Responsive, Retina & WebP
+ * Plugin Name:       Studio Noon Focus Crop
  * Description:       Set a focal point on any image and get smart-cropped, responsive, retina and WebP image sizes generated on the fly. No more regenerating thumbnails.
- * Version:           1.3.0
+ * Version:           1.3.1
  * Author:            Studio Noon
  * Author URI:        https://noon.studio
  * License:           GPLv2 or later
@@ -14,19 +14,19 @@
  * Requires at least: 6.4
  * Requires PHP:      8.0
  * Network:           true
- * Text Domain:       focal-point-images-smart-crop
+ * Text Domain:       noon-focus-crop
  */
 
 if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION', '1.3.0' );
+define( 'NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION', '1.3.1' );
 
 if ( ! file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	add_action( 'admin_notices', function () {
 		echo '<div class="notice notice-error"><p>'
-			. esc_html__( 'Focal Retina Image Generator: run "composer install" in the plugin directory.', 'focal-point-images-smart-crop' )
+			. esc_html__( 'Focal Retina Image Generator: run "composer install" in the plugin directory.', 'noon-focus-crop' )
 			. '</p></div>';
 	} );
 	return;
@@ -46,7 +46,7 @@ register_activation_hook( __FILE__, function () {
 
 register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );
 
-$noon_focal = new Noon_Focal_Retina_Image_Generator_Admin( 'focal-point-images-smart-crop', NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION );
+$noon_focal = new Noon_Focal_Retina_Image_Generator_Admin( 'noon-focus-crop', NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION );
 
 // Self-heal the secret mirror if it was removed or the plugin was deployed without activating.
 add_action( 'admin_init', 'noon_focal_ensure_secret' );

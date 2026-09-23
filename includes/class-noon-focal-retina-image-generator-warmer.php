@@ -278,7 +278,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 	 * ------------------------------------------------------------------ */
 
 	public function bulk_action( $actions ) {
-		$actions[ self::BULK_ACTION ] = __( 'Warm image cache', 'focal-point-images-smart-crop' );
+		$actions[ self::BULK_ACTION ] = __( 'Warm image cache', 'noon-focus-crop' );
 		return $actions;
 	}
 
@@ -305,7 +305,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 
 		add_settings_section(
 			'noon_focal_cache',
-			__( 'Image cache', 'focal-point-images-smart-crop' ),
+			__( 'Image cache', 'noon-focus-crop' ),
 			array( $this, 'render_settings_section' ),
 			'media'
 		);
@@ -322,9 +322,9 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 				'<p>%s</p>',
 				$running
 					/* translators: 1: images done, 2: total images */
-					? sprintf( esc_html__( 'Warming in progress: %1$d of %2$d images done.', 'focal-point-images-smart-crop' ), (int) $progress['done'], (int) $progress['total'] )
+					? sprintf( esc_html__( 'Warming in progress: %1$d of %2$d images done.', 'noon-focus-crop' ), (int) $progress['done'], (int) $progress['total'] )
 					/* translators: 1: human-readable time span, 2: number of images */
-					: sprintf( esc_html__( 'Last run finished %1$s ago (%2$d images).', 'focal-point-images-smart-crop' ), esc_html( human_time_diff( (int) $progress['finished'] ) ), (int) $progress['done'] )
+					: sprintf( esc_html__( 'Last run finished %1$s ago (%2$d images).', 'noon-focus-crop' ), esc_html( human_time_diff( (int) $progress['finished'] ) ), (int) $progress['done'] )
 			);
 		}
 
@@ -333,9 +333,9 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 			'<p><a class="button" href="%s">%s</a></p><p class="description">%s</p>',
 			esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=' . self::ADMIN_ACTION ), self::ADMIN_ACTION ) ),
 			$running
-				? esc_html__( 'Restart warming', 'focal-point-images-smart-crop' )
-				: esc_html__( 'Warm cache for all images', 'focal-point-images-smart-crop' ),
-			esc_html__( 'Pre-builds every registered size (1x, 1.5x, 2x, native and WebP) for every image in the background via WP-Cron. Already-cached renditions are skipped.', 'focal-point-images-smart-crop' )
+				? esc_html__( 'Restart warming', 'noon-focus-crop' )
+				: esc_html__( 'Warm cache for all images', 'noon-focus-crop' ),
+			esc_html__( 'Pre-builds every registered size (1x, 1.5x, 2x, native and WebP) for every image in the background via WP-Cron. Already-cached renditions are skipped.', 'noon-focus-crop' )
 		);
 
 	}
@@ -343,7 +343,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 	public function handle_warm_all() {
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do that.', 'focal-point-images-smart-crop' ) );
+			wp_die( esc_html__( 'You are not allowed to do that.', 'noon-focus-crop' ) );
 		}
 
 		check_admin_referer( self::ADMIN_ACTION );
@@ -371,7 +371,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
 				esc_html( sprintf(
 					/* translators: %d: number of images */
-					_n( '%d image queued for cache warming.', '%d images queued for cache warming.', $warmed, 'focal-point-images-smart-crop' ),
+					_n( '%d image queued for cache warming.', '%d images queued for cache warming.', $warmed, 'noon-focus-crop' ),
 					$warmed
 				) )
 			);
@@ -380,7 +380,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 		if ( $started ) {
 			printf(
 				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
-				esc_html__( 'Cache warming started. It runs in the background; reload this page to see progress.', 'focal-point-images-smart-crop' )
+				esc_html__( 'Cache warming started. It runs in the background; reload this page to see progress.', 'noon-focus-crop' )
 			);
 		}
 

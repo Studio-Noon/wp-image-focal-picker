@@ -1,10 +1,10 @@
-=== Focal Point Images – Smart Crop, Responsive, Retina & WebP ===
+=== Studio Noon Focus Crop ===
 Contributors: studionoon
 Tags: focal point, image crop, responsive images, webp, retina
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,7 +71,7 @@ map "$arg_direct:$arg_w:$arg_h:$arg_s" $noon_focal_glide {
 # server {}, before any generic static-file location
 location ~* ^/(?:[_0-9a-zA-Z-]+/)?wp-content/uploads/.+\.[a-z0-9]+$ {
     if ($noon_focal_glide) {
-        rewrite ^ /wp-content/plugins/focal-point-images-smart-crop/media.php last;
+        rewrite ^ /wp-content/plugins/noon-focus-crop/media.php last;
     }
 }
 `
@@ -132,6 +132,9 @@ WordPress goes back to its generated files. Sizes that were never written to dis
 4. Settings → Media status panel.
 
 == Changelog ==
+
+= 1.3.1 =
+* Renamed the plugin to Studio Noon Focus Crop (from Focal Point Images – Smart Crop, Responsive, Retina & WebP) and the text domain to `noon-focus-crop`, per WordPress.org's naming guidelines.
 
 = 1.3.0 =
 * "Suggest from faces": in-browser face detection moves the focal point to keep as many faces as possible whole in every cropped size, outlines the faces on the picker and badges each crop preview with how it treats them. Loaded on first use only; `noon_focal_face_detection` filter hides it.

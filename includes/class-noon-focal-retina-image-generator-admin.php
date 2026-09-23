@@ -31,7 +31,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			self::META,
 			array(
 				'type'              => 'object',
-				'description'       => __( 'Focal point of the image, as fractions of width and height (0–1).', 'focal-point-images-smart-crop' ),
+				'description'       => __( 'Focal point of the image, as fractions of width and height (0–1).', 'noon-focus-crop' ),
 				'single'            => true,
 				'sanitize_callback' => array( __CLASS__, 'sanitize_focus' ),
 				'auth_callback'     => function ( $allowed, $meta_key, $post_id ) {
@@ -137,7 +137,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			</div>
 
 			<button type="button" class="noon_edit_focalpoint button" data-attachment-id="<?php echo esc_attr( $post->ID ); ?>">
-				<?php esc_html_e( 'Edit Focal Point', 'focal-point-images-smart-crop' ); ?>
+				<?php esc_html_e( 'Edit Focal Point', 'noon-focus-crop' ); ?>
 			</button>
 
 			<div class="Noon_Focal_Retina_Image_Generator_Template hidden">
@@ -147,7 +147,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 							<div class="Noon_Focal_Retina_Image_Generator_Wrapper">
 								<div class="noon-focal-stage-img"><?php echo wp_get_attachment_image( $post->ID, 'full' ); ?></div>
 							</div>
-							<p class="description"><?php esc_html_e( 'Click or drag the point to the most important part of the image. The crops follow it live; nothing is generated or saved until you apply.', 'focal-point-images-smart-crop' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Click or drag the point to the most important part of the image. The crops follow it live; nothing is generated or saved until you apply.', 'noon-focus-crop' ); ?></p>
 						</div>
 						<div class="noon-focal-editor__previews Noon_Focal_Retina_Image_Generator_Previews noon-focal-size-previews noon-focal-size-previews--grid" data-src="<?php echo esc_url( wp_get_attachment_image_url( $post->ID, 'full' ) ); ?>">
 							<div class="previews noon-focal-size-previews__grid"></div>
@@ -155,13 +155,13 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 					</div>
 					<footer class="actions">
 						<div class="noon-focal-coordinates">
-							<label><span><?php esc_html_e( 'Left (%)', 'focal-point-images-smart-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="x" /></label>
-							<label><span><?php esc_html_e( 'Top (%)', 'focal-point-images-smart-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="y" /></label>
+							<label><span><?php esc_html_e( 'Left (%)', 'noon-focus-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="x" /></label>
+							<label><span><?php esc_html_e( 'Top (%)', 'noon-focus-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="y" /></label>
 						</div>
-						<button type="button" class="button detect-faces"><?php esc_html_e( 'Suggest from faces', 'focal-point-images-smart-crop' ); ?></button>
+						<button type="button" class="button detect-faces"><?php esc_html_e( 'Suggest from faces', 'noon-focus-crop' ); ?></button>
 						<span class="faces-status description" aria-live="polite"></span>
-						<button type="button" class="button cancel"><?php esc_html_e( 'Cancel', 'focal-point-images-smart-crop' ); ?></button>
-						<button type="button" class="button apply"><?php esc_html_e( 'Apply', 'focal-point-images-smart-crop' ); ?></button>
+						<button type="button" class="button cancel"><?php esc_html_e( 'Cancel', 'noon-focus-crop' ); ?></button>
+						<button type="button" class="button apply"><?php esc_html_e( 'Apply', 'noon-focus-crop' ); ?></button>
 					</footer>
 				</div>
 			</div>
@@ -173,17 +173,17 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		$fields = array(
 			self::META . '_y' => array(
 				'input' => 'hidden',
-				'label' => __( 'Focal Point Y', 'focal-point-images-smart-crop' ),
+				'label' => __( 'Focal Point Y', 'noon-focus-crop' ),
 				'value' => $focus['y'],
 			),
 			self::META . '_x' => array(
 				'input' => 'hidden',
-				'label' => __( 'Focal Point X', 'focal-point-images-smart-crop' ),
+				'label' => __( 'Focal Point X', 'noon-focus-crop' ),
 				'value' => $focus['x'],
 			),
 			self::META        => array(
 				'input' => 'html',
-				'label' => __( 'Focal Point Picker', 'focal-point-images-smart-crop' ),
+				'label' => __( 'Focal Point Picker', 'noon-focus-crop' ),
 				'html'  => $html,
 			),
 		) + $fields;
@@ -230,7 +230,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			$asset['version'],
 			true
 		);
-		wp_set_script_translations( $handle, 'focal-point-images-smart-crop' );
+		wp_set_script_translations( $handle, 'noon-focus-crop' );
 
 		if ( $style_file && file_exists( $build . $style_file ) ) {
 			wp_enqueue_style( $handle, $url . $style_file, $style_deps, $asset['version'] );
@@ -397,9 +397,9 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		echo '<div class="notice notice-error"><p><strong>'
-			. esc_html__( 'Focal Retina Image Generator: images are not being served through Glide.', 'focal-point-images-smart-crop' )
+			. esc_html__( 'Focal Retina Image Generator: images are not being served through Glide.', 'noon-focus-crop' )
 			. '</strong> '
-			. esc_html__( 'WordPress does not manage .htaccess on multisite. Add this block near the top of your .htaccess, before the RewriteCond %{REQUEST_FILENAME} -f rule:', 'focal-point-images-smart-crop' )
+			. esc_html__( 'WordPress does not manage .htaccess on multisite. Add this block near the top of your .htaccess, before the RewriteCond %{REQUEST_FILENAME} -f rule:', 'noon-focus-crop' )
 			. '</p><pre style="overflow:auto;padding:8px;background:#f6f7f7">' . esc_html( self::htaccess_rules() ) . '</pre></div>';
 
 	}

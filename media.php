@@ -121,7 +121,7 @@ function noon_focal_serve_request() {
 
 		http_response_code( 500 );
 		// Without WordPress the PHP error log is the only channel for this.
-		error_log( 'focal-point-images-smart-crop: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( 'noon-focus-crop: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 
 	}
 
