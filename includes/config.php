@@ -12,11 +12,12 @@
  * @package Noon_Focal_Retina_Image_Generator
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
-	// Outside WordPress only media.php may load this file.
-	if ( ! defined( 'NOON_FOCAL_MEDIA_ENDPOINT' ) ) {
-		exit;
-	}
+// Not the standard ABSPATH guard: this file is deliberately loadable
+// outside WordPress by media.php (see that file's docblock), which defines
+// NOON_FOCAL_MEDIA_ENDPOINT instead of booting WordPress. Direct access by
+// anything else is blocked.
+if ( ! defined( 'ABSPATH' ) && ! defined( 'NOON_FOCAL_MEDIA_ENDPOINT' ) ) {
+	exit;
 }
 
 if ( ! defined( 'NOON_FOCAL_CONTENT_DIR' ) ) {
@@ -75,6 +76,57 @@ if ( ! function_exists( 'noon_focal_webp_supported' ) ) {
 		}
 
 		return $params;
+
+	}
+
+}
+
+if ( ! function_exists( 'noon_focal_allowed_glide_params' ) ) {
+
+	/**
+	 * Query keys Glide's active manipulators use. Mirrors
+	 * League\Glide\Api\Api::GLOBAL_API_PARAMS and the getApiParams() of every
+	 * manipulator League\Glide\ServerFactory::getManipulators() registers,
+	 * minus the Watermark manipulator's `mark*` keys and the preset `p` key:
+	 * neither watermarks nor presets are configured in any of this plugin's
+	 * ServerFactory::create() calls, so those keys do nothing today. `s`
+	 * (signature) is kept so SignatureFactory can validate it; Glide itself
+	 * strips `s` and `p` before running manipulations.
+	 *
+	 * @return string[]
+	 */
+	function noon_focal_allowed_glide_params() {
+		return array(
+			's', 'q', 'fm',                                                 // Global.
+			'or',                                                           // Orientation.
+			'crop',                                                         // Crop.
+			'w', 'h', 'fit', 'dpr',                                         // Size.
+			'bri', 'con', 'gam', 'sharp', 'filt', 'flip', 'blur', 'pixel',  // Adjustments.
+			'bg', 'border',                                                 // Background / Border.
+		);
+	}
+
+	/**
+	 * Reduce a raw query-string params array (e.g. from parse_str()) to the
+	 * allowlisted keys above, dropping everything else and any non-scalar
+	 * value — parse_str() turns a request like `w[]=1` into a nested array,
+	 * which Glide's manipulators were never designed to receive.
+	 *
+	 * @param array $params Raw params, keyed by query string name.
+	 * @return array<string, string> Allowlisted, scalar-only params.
+	 */
+	function noon_focal_sanitize_glide_params( array $params ) {
+
+		$allowed = array_flip( noon_focal_allowed_glide_params() );
+		$clean   = array();
+
+		foreach ( $params as $key => $value ) {
+			if ( isset( $allowed[ $key ] ) && is_scalar( $value ) ) {
+				$clean[ $key ] = (string) $value;
+			}
+		}
+
+		return $clean;
 
 	}
 

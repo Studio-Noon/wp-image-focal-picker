@@ -14,11 +14,17 @@
  * @package Noon_Focal_Retina_Image_Generator
  */
 
+// This intentionally does NOT exit when ABSPATH is undefined — that is the
+// expected, documented state for every real request to this file (see the
+// docblock above: this is a standalone endpoint the web server rewrites
+// image URLs to directly, and it must not boot WordPress). What follows is
+// this file's replacement for the standard ABSPATH guard: refuse anything
+// that isn't a genuine Glide-parameterised request before doing any work.
 if ( ! defined( 'ABSPATH' ) ) {
 	// Not loaded by WordPress, as intended. Cheaply refuse an empty query
 	// string before loading config.php/vendor; everything else is decided
 	// below, once we know whether the site has a signing secret.
-	if ( '' === (string) ( $_SERVER['QUERY_STRING'] ?? '' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- only tested for emptiness, no WordPress available.
+	if ( '' === (string) ( $_SERVER['QUERY_STRING'] ?? '' ) ) {
 		http_response_code( 404 );
 		exit;
 	}
@@ -63,7 +69,7 @@ function noon_focal_serve_request() {
 	// WordPress' sanitisation helpers are not available here; the path is only
 	// ever used to look a file up inside the uploads directory, and Glide
 	// refuses traversal, but be explicit about it anyway.
-	$uri = (string) ( $_SERVER['REQUEST_URI'] ?? '' ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- validated below, no WordPress available.
+	$uri = (string) ( $_SERVER['REQUEST_URI'] ?? '' ); 
 
 	list( $path, $query ) = array_pad( explode( '?', $uri, 2 ), 2, '' );
 
@@ -79,6 +85,12 @@ function noon_focal_serve_request() {
 	$file_path = substr( $path, $prefix + strlen( '/uploads/' ) );
 
 	parse_str( $query, $params );
+
+	// Only forward query keys Glide's active manipulators actually use, and
+	// only scalar values (see includes/config.php). Applied before signature
+	// validation so `s` is checked against — and Glide only ever receives —
+	// the same allowlisted set, whether or not a request is signed.
+	$params = noon_focal_sanitize_glide_params( $params );
 
 	// Glide (GD) cannot decode SVG etc.; hand those back to the web server.
 	if ( ! noon_focal_is_raster( $file_path ) ) {

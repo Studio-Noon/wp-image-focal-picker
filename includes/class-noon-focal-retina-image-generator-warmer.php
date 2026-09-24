@@ -11,6 +11,10 @@
  * @package Noon_Focal_Retina_Image_Generator
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use League\Glide\ServerFactory;
 
 class Noon_Focal_Retina_Image_Generator_Warmer {

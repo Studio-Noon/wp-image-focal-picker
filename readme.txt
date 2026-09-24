@@ -4,7 +4,7 @@ Tags: focal point, image crop, responsive images, webp, retina
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,10 @@ WordPress goes back to its generated files. Sizes that were never written to dis
 4. Settings → Media status panel.
 
 == Changelog ==
+
+= 1.3.2 =
+* The image endpoint (`media.php`) now validates every request against an explicit allowlist of the Glide parameters it actually uses, dropping anything else before it reaches Glide — hardens unsigned-fallback deployments (no signing secret configured) against arbitrary manipulation requests.
+* Added the standard direct-access guard to the cache warmer class, and clarified the intentional guards in `media.php` and `includes/config.php`, which must stay reachable without WordPress loaded.
 
 = 1.3.1 =
 * Renamed the plugin to Studio Noon Focus Crop (from Focal Point Images – Smart Crop, Responsive, Retina & WebP) and the text domain to `noon-focus-crop`, per WordPress.org's naming guidelines.
