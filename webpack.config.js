@@ -7,6 +7,13 @@ const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 
 module.exports = {
 	...defaultConfig,
+	module: {
+		...defaultConfig.module,
+		rules: [
+			...defaultConfig.module.rules,
+			{ test: /tiny_face_detector_model\.bin$/, type: 'asset/inline' },
+		],
+	},
 	optimization: {
 		...defaultConfig.optimization,
 		splitChunks: {

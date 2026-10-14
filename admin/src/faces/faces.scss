@@ -18,6 +18,10 @@
 		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
 	}
 
+	&__manual {
+		border-style: dashed;
+	}
+
 	&__remove {
 		position: absolute;
 		top: 0;
@@ -49,12 +53,27 @@
 	}
 }
 
+.noon-focal-add-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	// Overridden inline where the host measures a specific target rect (the
+	// block-editor pickers); the classic dialog's image wrapper hugs the
+	// image exactly, so 100% is already correct there.
+	width: 100%;
+	height: 100%;
+	z-index: 1;
+	cursor: crosshair;
+	background: rgba(34, 113, 177, 0.08);
+	outline: 2px dashed rgba(34, 113, 177, 0.6);
+	outline-offset: -2px;
+}
+
 .noon-focal-face-suggest {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
-	margin-top: 8px;
 
 	.description {
 		margin: 0;

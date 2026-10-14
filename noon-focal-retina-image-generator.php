@@ -6,7 +6,7 @@
  * @wordpress-plugin
  * Plugin Name:       Studio Noon Focus Crop
  * Description:       Set a focal point on any image and get smart-cropped, responsive, retina and WebP image sizes generated on the fly. No more regenerating thumbnails.
- * Version:           1.3.2
+ * Version:           1.3.9
  * Author:            Studio Noon
  * Author URI:        https://noon.studio
  * License:           GPLv2 or later
@@ -42,9 +42,13 @@ require __DIR__ . '/includes/class-noon-focal-retina-image-generator-status.php'
 register_activation_hook( __FILE__, function () {
 	noon_focal_ensure_secret();
 	flush_rewrite_rules();
+	Noon_Focal_Retina_Image_Generator_Admin::sync_multisite_htaccess();
 } );
 
-register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );
+register_deactivation_hook( __FILE__, function () {
+	flush_rewrite_rules();
+	Noon_Focal_Retina_Image_Generator_Admin::sync_multisite_htaccess( false );
+} );
 
 $noon_focal = new Noon_Focal_Retina_Image_Generator_Admin( 'noon-focus-crop', NOON_FOCAL_RETINA_IMAGE_GENERATOR_VERSION );
 
@@ -53,7 +57,8 @@ add_action( 'admin_init', 'noon_focal_ensure_secret' );
 
 add_action( 'init', array( $noon_focal, 'register_meta' ) );
 add_filter( 'mod_rewrite_rules', array( $noon_focal, 'htaccess_contents' ), 99 );
-// Multisite never writes .htaccess, so tell the network admin what to add.
+// Multisite never writes .htaccess, so write the block ourselves; the notice covers an unwritable file.
+add_action( 'admin_init', array( $noon_focal, 'maybe_sync_multisite_htaccess' ), 20 );
 add_action( 'network_admin_notices', array( $noon_focal, 'htaccess_notice' ) );
 
 add_action( 'enqueue_block_editor_assets', array( $noon_focal, 'editor_assets' ) );

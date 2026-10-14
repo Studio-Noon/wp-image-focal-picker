@@ -36,6 +36,14 @@
   .noon-focal-editor {
     min-height: 0;
     margin: 24px;
+
+    &__face-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
   }
 
   // Let the picker use the column: core caps it at a fixed width otherwise.

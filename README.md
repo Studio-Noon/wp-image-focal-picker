@@ -106,10 +106,10 @@ For art direction without a registered size, build a `<picture>` from the same f
 
 Every picker has a **Suggest from faces** button. It runs face detection in the browser ([@vladmandic/face-api](https://github.com/vladmandic/face-api), TinyFaceDetector) and moves the focal point to wherever the most faces stay whole across *every* cropped size — scored per size, so a wide banner and a tall card are both taken into account. Detected faces are outlined on the image, and each crop preview is badged: green when all faces are in, amber when a face is in but its headroom is trimmed, red when a crop cuts through a face. Faces that cannot all fit a size are left out of frame rather than sliced.
 
-The detector (~1.5 MB) and its weights are only fetched on the first click, from the plugin's own `admin/build/` directory; the image never leaves the browser. Nothing is saved until the point is applied as usual.
+The detector and its embedded weights are only fetched on the first click, from the plugin's own `admin/build/` directory; the image never leaves the browser. Nothing is saved until the point is applied as usual.
 
 - `noon_focal_face_detection` — return `false` to hide the button.
-- `npm run build` copies the weights to `admin/build/models/`; without them the button is not shown.
+- `npm run build` embeds the model weights into the lazy-loaded `admin/build/face-api.js` chunk. No separate `.bin` or `.dat` request is needed; without the detector chunk the button is not shown.
 
 ## Cache warming
 

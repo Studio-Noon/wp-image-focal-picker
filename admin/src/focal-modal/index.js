@@ -10,7 +10,7 @@ import { useState } from "@wordpress/element";
 import { __ } from "@wordpress/i18n";
 
 import SizePreviews from "../size-previews";
-import { FaceSuggest, FocalPicker } from "../faces";
+import { AddFaceButton, FaceSuggest, FocalPicker } from "../faces";
 import "./modal.scss";
 
 export default function FocalPointModal({
@@ -24,6 +24,7 @@ export default function FocalPointModal({
 }) {
   const [draft, setDraft] = useState(value);
   const [faces, setFaces] = useState(initialFaces);
+  const [addingFace, setAddingFace] = useState(false);
 
   return (
     <Modal
@@ -44,15 +45,19 @@ export default function FocalPointModal({
               onDrag={setDraft}
               faces={faces}
               onFacesChange={setFaces}
+              adding={addingFace}
             />
-            <FaceSuggest
-              src={src}
-              width={width}
-              height={height}
-              onFaces={setFaces}
-              faces={faces}
-              onSuggest={setDraft}
-            />
+            <div className="noon-focal-editor__face-actions">
+              <FaceSuggest
+                src={src}
+                width={width}
+                height={height}
+                onFaces={setFaces}
+                faces={faces}
+                onSuggest={setDraft}
+              />
+              <AddFaceButton adding={addingFace} onToggle={setAddingFace} />
+            </div>
             <p className="description">
               {__(
                 "Drag the point to the most important part of the image. The crops on the right follow it live; nothing is generated or saved until you apply.",

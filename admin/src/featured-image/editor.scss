@@ -1,5 +1,49 @@
-.remove_standard_image{
-    .editor-post-featured-image__container {
+.remove_standard_image {
+    // The native image preview is replaced by our focal-point picker above it,
+    // but .editor-post-featured-image__container also holds the Replace/Remove
+    // actions — keep those, just drop the image button that triggers them.
+    .editor-post-featured-image__toggle,
+    .editor-post-featured-image__preview {
         display: none;
+    }
+
+    .editor-post-featured-image__container {
+        position: static;
+    }
+
+    // Core shows these on hover/focus only, overlaid on the image. There's no
+    // image to hover here, so keep them permanently visible underneath instead.
+    .editor-post-featured-image__actions {
+        position: static !important;
+        opacity: 1 !important;
+        padding: 8px 0 0;
+    }
+
+    // Core only gives these a visible button style (border, filled hover) when
+    // the image is missing; otherwise they're styled to float over the image
+    // itself. There's no image to float over here, so give them that look
+    // unconditionally — matches .components-button.is-secondary.
+    .editor-post-featured-image__action {
+        background: none;
+        backdrop-filter: none;
+        border-color: var(--wp-admin-theme-color, #3858e9);
+        color: var(--wp-admin-theme-color, #3858e9);
+
+        &:hover {
+            background: color-mix(in srgb, var(--wp-admin-theme-color, #3858e9) 4%, transparent);
+        }
+    }
+
+    // Redundant in this compact view; the full-screen editor has its own
+    // Left/Top fields.
+    .focal-point-picker__controls {
+        display: none;
+    }
+
+    .noon-focal-featured-image__divider {
+        height: 0;
+        margin: 16px 0 0;
+        border: none;
+        border-top: 1px solid #dcdcde;
     }
 }

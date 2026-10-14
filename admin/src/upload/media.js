@@ -5,9 +5,15 @@ import { matchesSize, shapeOptions, resultsMessage } from '../size-previews/filt
 import { openExpandedPreview } from '../size-previews/expanded';
 import { faceCoverage } from '../faces/geometry';
 import { suggestFocus } from '../faces/suggest';
-import { detectFaces, faceDetectionAvailable } from '../faces/detect';
+import { detectFaces, faceDetectionAvailable, pad } from '../faces/detect';
 import { facesMessage, faceBadge, facesSelectionMessage } from '../faces/messages';
 import './style.scss';
+
+// Default size for a manually-added face: a square this fraction of the
+// image's shorter side, converted to the width/height-relative fractions
+// detected faces use. Matches admin/src/faces/index.js (the block-editor
+// equivalent of this dialog).
+const MANUAL_FACE_SIZE = 0.18;
 
 /**
  * "Edit Focal Point" button in the attachment details (media modal and the
@@ -165,6 +171,9 @@ import './style.scss';
 		overlay.className = 'noon-focal-faces';
 		faces.forEach( ( face, index ) => {
 			const box = document.createElement( 'span' );
+			if ( face.manual ) {
+				box.className = 'noon-focal-faces__manual';
+			}
 			box.style.left = `${ face.raw.x * 100 }%`;
 			box.style.top = `${ face.raw.y * 100 }%`;
 			box.style.width = `${ face.raw.w * 100 }%`;
@@ -184,6 +193,53 @@ import './style.scss';
 			} );
 			box.appendChild( remove );
 			overlay.appendChild( box );
+		} );
+		parent.appendChild( overlay );
+	}
+
+	/**
+	 * A default-sized face box centred on a click, the same shape
+	 * detectFaces() produces (padded box + raw + score), so it behaves
+	 * identically to a detected one (coverage scoring, removal, …).
+	 */
+	function createFace( fractionX, fractionY, imgW, imgH ) {
+		const side = MANUAL_FACE_SIZE * Math.min( imgW, imgH );
+		const rawW = Math.min( 1, side / imgW );
+		const rawH = Math.min( 1, side / imgH );
+		const raw = {
+			x: Math.min( Math.max( fractionX - rawW / 2, 0 ), 1 - rawW ),
+			y: Math.min( Math.max( fractionY - rawH / 2, 0 ), 1 - rawH ),
+			w: rawW,
+			h: rawH,
+		};
+		return { ...pad( raw ), score: 1, manual: true };
+	}
+
+	/**
+	 * Toggle the "click the image to add a face" overlay. Only present while
+	 * adding, so normal picker dragging is unaffected the rest of the time.
+	 */
+	function renderAddOverlay( img, active, onAdd ) {
+		const parent = img.parentElement;
+		parent.querySelector( '.noon-focal-add-overlay' )?.remove();
+
+		if ( ! active ) {
+			return;
+		}
+
+		const overlay = document.createElement( 'div' );
+		overlay.className = 'noon-focal-add-overlay';
+		[ 'pointerdown', 'mousedown' ].forEach( ( event ) => {
+			overlay.addEventListener( event, ( e ) => e.stopPropagation() );
+		} );
+		overlay.addEventListener( 'click', ( event ) => {
+			event.preventDefault();
+			event.stopPropagation();
+			const box = overlay.getBoundingClientRect();
+			onAdd(
+				( event.clientX - box.left ) / box.width,
+				( event.clientY - box.top ) / box.height,
+			);
 		} );
 		parent.appendChild( overlay );
 	}
@@ -210,6 +266,11 @@ import './style.scss';
 	 * hidden there and mirrored as a clone in the actions row; if that row
 	 * is wiped, syncDetails() (re-run on every change inside the details
 	 * pane) just clones a fresh one from the still-present original.
+	 *
+	 * Once the button has somewhere to live, the whole compat field — its
+	 * label and the redundant (and, at the sidebar's width, badly squashed)
+	 * preview thumbnail — is hidden too; without an actions row to clone
+	 * into, the field is the only way to reach the picker, so it stays.
 	 */
 	function syncDetails( details ) {
 		const container = $( details ).find( '.Noon_Focal_Retina_Container' ).first();
@@ -219,14 +280,17 @@ import './style.scss';
 			return;
 		}
 
+		const field = container.closest( '.compat-field-noon_focal_point' );
 		const actions = $( details ).find( '.attachment-actions' );
 
 		if ( ! actions.length ) {
 			original.removeClass( 'hidden' );
+			field.removeClass( 'hidden' );
 			return;
 		}
 
 		original.addClass( 'hidden' );
+		field.addClass( 'hidden' );
 		if ( ! actions.find( '.noon_edit_focalpoint' ).length ) {
 			original.clone( true ).removeClass( 'hidden' ).appendTo( actions );
 		}
@@ -265,6 +329,7 @@ import './style.scss';
 			.first();
 		const inputX = document.querySelector( `input[name="attachments[${ id }][noon_focal_point_x]"]` );
 		const inputY = document.querySelector( `input[name="attachments[${ id }][noon_focal_point_y]"]` );
+		const inputFaces = document.querySelector( `input[name="attachments[${ id }][noon_focal_point_faces]"]` );
 
 		if ( ! inputX || ! inputY ) {
 			return;
@@ -274,6 +339,12 @@ import './style.scss';
 		dialog = container.find( '.Noon_Focal_Retina_Image_Generator_Template' ).clone().removeClass( 'hidden' );
 
 		const initial = { x: inputX.value, y: inputY.value };
+		let initialFaces = [];
+		try {
+			initialFaces = JSON.parse( inputFaces?.value || '[]' );
+		} catch ( e ) {
+			initialFaces = [];
+		}
 
 		dialog.dialog( {
 			title: 'Focal Point',
@@ -292,9 +363,10 @@ import './style.scss';
 			open() {
 				$( '.ui-widget-overlay' ).one( 'click', closeDialog );
 
-				const img = dialog.find( '.Noon_Focal_Retina_Image_Generator_Wrapper img' )[ 0 ];
+				const img = dialog.find( '.noon-focal-stage-img img' )[ 0 ];
 				const updatePreviews = renderPreviews( container, dialog );
-				let faces = [];
+				let faces = initialFaces;
+				let addingFace = false;
 				const leftControl = dialog.find( '[data-focal-axis="x"]' )[ 0 ];
 				const topControl = dialog.find( '[data-focal-axis="y"]' )[ 0 ];
 				const updateCoordinates = ( x, y ) => {
@@ -302,8 +374,16 @@ import './style.scss';
 					topControl.value = Math.round( y * 1000 ) / 10;
 				};
 
-				updatePreviews( parseFloat( initial.x ), parseFloat( initial.y ) );
+				updatePreviews( parseFloat( initial.x ), parseFloat( initial.y ), faces );
 				updateCoordinates( parseFloat( initial.x ), parseFloat( initial.y ) );
+
+				const frame = dialog.find( '.noon-focal-frame' );
+				dialog.find( '.actions .toggle-previews' ).on( 'click', function () {
+					const hidden = frame.toggleClass( 'noon-focal-frame--previews-hidden' ).hasClass( 'noon-focal-frame--previews-hidden' );
+					$( this ).text( hidden
+						? __( 'Show crop previews', 'focal-point-images-smart-crop' )
+						: __( 'Hide crop previews', 'focal-point-images-smart-crop' ) );
+				} );
 
 				// image-focus uses -1..1 with y pointing up; WordPress meta uses 0..1 from the top-left.
 				const picker = new FocusPicker( img, {
@@ -329,13 +409,51 @@ import './style.scss';
 				} );
 
 				const detect = dialog.find( '.actions .detect-faces' );
+				const addFace = dialog.find( '.actions .add-face' );
 				const status = dialog.find( '.actions .faces-status' );
+				// Re-suggest the point for the current faces. With none left the
+				// point stays where it is.
+				const refocus = () => {
+					const imgW = parseInt( container.data( 'width' ), 10 ) || 0;
+					const imgH = parseInt( container.data( 'height' ), 10 ) || 0;
+					const point = suggestFocus( faces, imgW, imgH, previewSizes() );
+					if ( point ) {
+						// setFocus() fires onChange, which writes the inputs and previews.
+						picker.setFocus( { x: ( point.x - 0.5 ) * 2, y: ( point.y - 0.5 ) * -2 } );
+					} else {
+						updatePreviews( parseFloat( inputX.value ), parseFloat( inputY.value ), faces );
+					}
+				};
+
 				const removeFace = ( index ) => {
 					faces = faces.filter( ( face, i ) => i !== index );
 					renderFaces( img, faces, removeFace );
-					updatePreviews( parseFloat( inputX.value ), parseFloat( inputY.value ), faces );
+					refocus();
 					status.text( facesSelectionMessage( faces ) );
 				};
+
+				if ( faces.length ) {
+					renderFaces( img, faces, removeFace );
+				}
+
+				addFace.on( 'click', () => {
+					addingFace = ! addingFace;
+					addFace.toggleClass( 'button-primary', addingFace );
+					addFace.text( addingFace
+						? __( 'Click the image to place a face…', 'focal-point-images-smart-crop' )
+						: __( 'Add face', 'focal-point-images-smart-crop' ) );
+					renderAddOverlay( img, addingFace, ( fractionX, fractionY ) => {
+						const imgW = parseInt( container.data( 'width' ), 10 ) || 0;
+						const imgH = parseInt( container.data( 'height' ), 10 ) || 0;
+						if ( ! imgW || ! imgH ) {
+							return;
+						}
+						faces = [ ...faces, createFace( fractionX, fractionY, imgW, imgH ) ];
+						renderFaces( img, faces, removeFace );
+						refocus();
+						status.text( facesMessage( faces ) );
+					} );
+				} );
 
 				if ( ! faceDetectionAvailable() ) {
 					detect.remove();
@@ -381,6 +499,10 @@ import './style.scss';
 					// Triggers WordPress' attachment-details save.
 					$( inputX ).trigger( 'change' );
 					$( inputY ).trigger( 'change' );
+					if ( inputFaces ) {
+						inputFaces.value = JSON.stringify( faces );
+						$( inputFaces ).trigger( 'change' );
+					}
 					closeDialog();
 				} );
 			},

@@ -2,8 +2,8 @@
  * Face detection in the browser, to suggest a focal point.
  *
  * @vladmandic/face-api (TensorFlow.js + TinyFaceDetector, ~1.5 MB) is only
- * fetched on first use, as its own chunk, with the weights served from the
- * plugin's admin/build/models directory. The image never leaves the browser.
+ * fetched on first use, as its own chunk, with its model weights embedded in
+ * the same JavaScript chunk. The image never leaves the browser.
  */
 
 // Longest side the image is drawn at before detection: TinyFaceDetector
@@ -23,20 +23,19 @@ const PAD = { x: 0.25, top: 0.35, bottom: 0.15 };
 let loading = null;
 
 /**
- * Whether the plugin has told us where the weights are.
+ * Whether the plugin has enabled face detection.
  *
  * @return {boolean}
  */
 export function faceDetectionAvailable() {
-	return Boolean( window.noonFocalPreview?.faces && window.noonFocalPreview?.models );
+	return Boolean( window.noonFocalPreview?.faces );
 }
 
 function load() {
 	if ( ! loading ) {
 		loading = ( async () => {
-			const faceapi = await import( /* webpackChunkName: "face-api" */ '@vladmandic/face-api' );
-			await faceapi.tf.ready();
-			await faceapi.nets.tinyFaceDetector.loadFromUri( window.noonFocalPreview.models );
+			const { loadDetector } = await import( /* webpackChunkName: "face-api" */ './model' );
+			const faceapi = await loadDetector();
 			return faceapi;
 		} )().catch( ( error ) => {
 			loading = null;
@@ -87,7 +86,15 @@ function merge( boxes ) {
 	return kept;
 }
 
-function pad( box ) {
+/**
+ * Add headroom around a raw face box (fractions of the image), the same
+ * padding detectFaces() applies, so a manually-added face matches detected
+ * ones.
+ *
+ * @param {{x: number, y: number, w: number, h: number}} box
+ * @return {{x: number, y: number, w: number, h: number, raw: Object}}
+ */
+export function pad( box ) {
 	const x0 = Math.max( 0, box.x - box.w * PAD.x );
 	const y0 = Math.max( 0, box.y - box.h * PAD.top );
 	const x1 = Math.min( 1, box.x + box.w * ( 1 + PAD.x ) );

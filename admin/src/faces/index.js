@@ -9,10 +9,15 @@ import { useState, useRef, useEffect, useLayoutEffect } from "@wordpress/element
 import { __ } from "@wordpress/i18n";
 
 import { previewSizes } from "../crop-position";
-import { detectFaces, faceDetectionAvailable } from "./detect";
+import { detectFaces, faceDetectionAvailable, pad } from "./detect";
 import { suggestFocus } from "./suggest";
 import { facesMessage, facesSelectionMessage } from "./messages";
 import "./faces.scss";
+
+// Default size for a manually-added face: a square this fraction of the
+// image's shorter side, converted to the width/height-relative fractions
+// detected faces use.
+const MANUAL_FACE_SIZE = 0.18;
 
 export { faceCoverage } from "./geometry";
 export { facesMessage, faceBadge } from "./messages";
@@ -83,21 +88,49 @@ export function FaceSuggest({ src, width, height, faces, onFaces, onSuggest }) {
 }
 
 /**
- * Core's FocalPointPicker with the detected faces outlined on the image.
- * Core owns the picker's DOM, so the overlay is a sibling sized to the media
- * element; pointer events pass through it, so dragging works as before.
+ * Toggle for "click the image to add a face" mode. Rendered separately from
+ * FocalPicker so callers can place it anywhere (e.g. alongside other actions),
+ * while FocalPicker itself owns the click-to-place handling.
+ *
+ * @param {Object}   props
+ * @param {boolean}  props.adding   Whether add-face mode is active.
+ * @param {Function} props.onToggle Receives the new adding state.
+ */
+export function AddFaceButton({ adding, onToggle }) {
+  return (
+    <Button
+      variant={adding ? "primary" : "secondary"}
+      size="small"
+      isPressed={adding}
+      onClick={() => onToggle(!adding)}
+    >
+      {adding
+        ? __("Click the image to place a face…", "focal-point-images-smart-crop")
+        : __("Add face", "focal-point-images-smart-crop")}
+    </Button>
+  );
+}
+
+/**
+ * Core's FocalPointPicker with the detected faces outlined on the image, and
+ * (when `adding` is on) a click-to-place handler that adds a new face where
+ * the image is clicked instead of moving the focal point. Core owns the
+ * picker's DOM, so both the face outlines and the add overlay are siblings
+ * sized to the media element; pointer events pass through the former, so
+ * dragging works as before, and the latter only exists while adding.
  *
  * @param {Object} props        FocalPointPicker props, plus:
  * @param {Array}  props.faces  Faces from detectFaces(), or empty.
- * @param {Function} props.onFacesChange Called when a detected face is removed.
+ * @param {Function} props.onFacesChange Called when a face is removed or added.
+ * @param {boolean}  props.adding Whether a click on the image adds a face.
  */
-export function FocalPicker({ faces = [], onFacesChange, ...pickerProps }) {
+export function FocalPicker({ faces = [], onFacesChange, adding = false, ...pickerProps }) {
   const ref = useRef();
   const [rect, setRect] = useState(null);
 
   useLayoutEffect(() => {
     const host = ref.current;
-    if (!host || !faces.length) {
+    if (!host) {
       return;
     }
 
@@ -127,6 +160,38 @@ export function FocalPicker({ faces = [], onFacesChange, ...pickerProps }) {
     return () => observer.disconnect();
   }, [faces, pickerProps.url]);
 
+  // Places a default-sized face box centred on a click, the same shape
+  // detectFaces() produces (padded box + raw + score), so it behaves
+  // identically to a detected one (coverage scoring, removal, …), then
+  // re-suggests the focal point so the new face is accounted for too.
+  const addFaceAt = (fractionX, fractionY) => {
+    const { width: imgW, height: imgH } = pickerProps.dimensions || {};
+    if (!imgW || !imgH || !onFacesChange) {
+      return;
+    }
+    const side = MANUAL_FACE_SIZE * Math.min(imgW, imgH);
+    const rawW = Math.min(1, side / imgW);
+    const rawH = Math.min(1, side / imgH);
+    const raw = {
+      x: Math.min(Math.max(fractionX - rawW / 2, 0), 1 - rawW),
+      y: Math.min(Math.max(fractionY - rawH / 2, 0), 1 - rawH),
+      w: rawW,
+      h: rawH,
+    };
+    updateFaces([...faces, { ...pad(raw), score: 1, manual: true }]);
+  };
+
+  // Faces changed by hand: store them and re-suggest the point. With none
+  // left the point stays where it is.
+  const updateFaces = (next) => {
+    onFacesChange(next);
+    const { width: imgW, height: imgH } = pickerProps.dimensions || {};
+    const point = suggestFocus(next, imgW, imgH, previewSizes());
+    if (point && pickerProps.onChange) {
+      pickerProps.onChange(point);
+    }
+  };
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <FocalPointPicker {...pickerProps} />
@@ -135,6 +200,7 @@ export function FocalPicker({ faces = [], onFacesChange, ...pickerProps }) {
           {faces.map((face, i) => (
             <span
               key={i}
+              className={face.manual ? "noon-focal-faces__manual" : undefined}
               style={{
                 left: `${face.raw.x * 100}%`,
                 top: `${face.raw.y * 100}%`,
@@ -153,7 +219,7 @@ export function FocalPicker({ faces = [], onFacesChange, ...pickerProps }) {
                   onTouchStart={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onFacesChange(faces.filter((face, index) => index !== i));
+                    updateFaces(faces.filter((face, index) => index !== i));
                   }}
                 >
                   ×
@@ -162,6 +228,26 @@ export function FocalPicker({ faces = [], onFacesChange, ...pickerProps }) {
             </span>
           ))}
         </div>
+      )}
+      {adding && rect && (
+        <div
+          className="noon-focal-add-overlay"
+          style={rect}
+          role="button"
+          tabIndex={-1}
+          aria-label={__("Click to place a face", "focal-point-images-smart-crop")}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const box = event.currentTarget.getBoundingClientRect();
+            addFaceAt(
+              (event.clientX - box.left) / box.width,
+              (event.clientY - box.top) / box.height,
+            );
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+        />
       )}
     </div>
   );

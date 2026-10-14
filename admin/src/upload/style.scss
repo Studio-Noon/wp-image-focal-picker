@@ -36,9 +36,68 @@
   min-height: 0;
   overflow: hidden;
 
-  .noon-focal-editor {
-    box-sizing: border-box;
-    margin: 16px;
+  // Core's attachment-details layout (.edit-attachment-frame rules in
+  // wp-admin/css/media.css) does the work: 65% media view, 35% sidebar.
+  // Its .attachment-details is absolutely positioned, so anchor it here.
+  .noon-focal-frame {
+    position: relative;
+  }
+
+  // Core caps .details-image with a % of .thumbnail, which our hugging
+  // wrapper would break; container units measure .thumbnail directly.
+  .noon-focal-frame .thumbnail {
+    container-type: size;
+  }
+
+  // image-focus positions its marker (and we position face boxes) relative
+  // to the img's parent, so that parent must hug the image exactly.
+  .noon-focal-stage-img {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto 16px;
+    line-height: 0;
+  }
+
+  .noon-focal-frame .attachment-media-view .details-image {
+    width: auto;
+    height: auto;
+    margin: 0;
+    max-width: 100cqw;
+    max-height: calc(100cqh - 56px);
+  }
+
+  .noon-focal-frame .thumbnail .description {
+    margin: 0;
+    text-align: center;
+  }
+
+  .noon-focal-frame .attachment-info .noon-focal-size-previews__filters {
+    background: #f6f7f7;
+  }
+
+  // Footer toggle collapses the sidebar so the image gets the full width.
+  .noon-focal-frame--previews-hidden {
+    .attachment-info {
+      display: none;
+    }
+
+    .attachment-media-view {
+      width: 100%;
+    }
+  }
+
+  // Core stacks the columns here and lets heights go auto, so there is no
+  // fixed box to measure.
+  @media only screen and (max-width: 480px) {
+    .noon-focal-frame .thumbnail {
+      container-type: normal;
+    }
+
+    .noon-focal-frame .attachment-media-view .details-image {
+      max-width: 100%;
+      max-height: 50vh;
+    }
   }
 
   .actions {
@@ -55,7 +114,7 @@
       color: #50575e;
     }
     margin: 0;
-    padding: 16px;
+    padding: 10px 16px;
     border-top: 1px solid #dcdcde;
   }
 }
@@ -65,7 +124,9 @@
 
   .focal-preview {
     display: flex;
-    height: 100%;
+    // Without this, the default flex stretch ignores the image's own
+    // height: auto and squashes it to the container's ambient height.
+    align-items: flex-start;
     width: 100%;
     position: relative;
     margin-bottom: 0.5rem;
@@ -85,33 +146,6 @@
   }
 }
 
-.Noon_Focal_Retina_Image_Generator_Wrapper {
-  flex: 0 1 auto;
-  min-height: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  width: 100%;
-
-  // image-focus positions its marker relative to the img's parent, so that
-  // parent must hug the image exactly: inline-block shrink-wraps it.
-  .noon-focal-stage-img {
-    position: relative;
-    display: inline-block;
-    max-width: 100%;
-    line-height: 0;
-  }
-
-  img {
-    max-width: 100%;
-    max-height: calc(100vh - 220px);
-  }
-
-  .details-image {
-    margin-bottom: 0 !important;
-  }
-}
-
 // Next to core's "Edit Image" under the picture (see placeButton).
 .attachment-details .attachment-actions .noon_edit_focalpoint {
   margin-left: 8px;
@@ -127,4 +161,12 @@
 
 .media-modal {
   z-index: 159998 !important;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.compat-field-noon_focal_point {
+  display: none !important;
 }

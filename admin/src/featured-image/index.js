@@ -5,14 +5,17 @@ import { useSelect, subscribe, select, dispatch } from "@wordpress/data";
 import { addFilter } from "@wordpress/hooks";
 
 import FocalPointModal from "../focal-modal";
-import { FaceSuggest, FocalPicker } from "../faces";
+import { FocalPicker } from "../faces";
 import "./editor.scss";
 
 const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
 const META_KEY = "noon_focal_point";
+const META_FACES_KEY = "noon_focal_point_faces";
 
 const isFocus = (value) =>
   value && typeof value.x === "number" && typeof value.y === "number";
+
+const facesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * Adds a focal point picker above the featured image panel and saves the
@@ -31,28 +34,39 @@ function withFocalPointPicker(OriginalComponent) {
       ? imageMeta.meta[META_KEY]
       : DEFAULT_FOCUS;
 
+    const savedFaces = Array.isArray(imageMeta?.meta?.[META_FACES_KEY])
+      ? imageMeta.meta[META_FACES_KEY]
+      : [];
+
     const [focalPoint, setFocalPoint] = useState(savedFocus);
     const [isModalOpen, setModalOpen] = useState(false);
-    const [faces, setFaces] = useState([]);
+    const [faces, setFaces] = useState(savedFaces);
     const latest = useRef({
       focalPoint: savedFocus,
-      saved: savedFocus,
+      savedFocus,
+      faces: savedFaces,
+      savedFaces,
       id: featuredImageId,
     });
 
-    // Reset the picker when the image (or its stored point) changes.
+    // Reset the picker when the image (or its stored point/faces) changes.
     useEffect(() => {
       setFocalPoint(savedFocus);
-      setFaces([]);
-      latest.current.saved = savedFocus;
+      setFaces(savedFaces);
+      latest.current.savedFocus = savedFocus;
+      latest.current.savedFaces = savedFaces;
       latest.current.id = featuredImageId;
-    }, [featuredImageId, savedFocus.x, savedFocus.y]);
+    }, [featuredImageId, savedFocus.x, savedFocus.y, JSON.stringify(savedFaces)]);
 
     useEffect(() => {
       latest.current.focalPoint = focalPoint;
     }, [focalPoint]);
 
-    // Persist the point once per successful (non-auto) post save.
+    useEffect(() => {
+      latest.current.faces = faces;
+    }, [faces]);
+
+    // Persist the point and faces once per successful (non-auto) post save.
     useEffect(() => {
       let wasSaving = false;
 
@@ -74,19 +88,27 @@ function withFocalPointPicker(OriginalComponent) {
           return;
         }
 
-        const { focalPoint: current, saved, id } = latest.current;
+        const { focalPoint: current, savedFocus: saved, faces: currentFaces, savedFaces: savedFacesNow, id } = latest.current;
 
-        if (!id || (current.x === saved.x && current.y === saved.y)) {
+        const focusChanged = !(current.x === saved.x && current.y === saved.y);
+        const facesChanged = !facesEqual(currentFaces, savedFacesNow);
+
+        if (!id || (!focusChanged && !facesChanged)) {
           return;
         }
 
-        latest.current.saved = current;
+        const meta = {};
+        if (focusChanged) {
+          latest.current.savedFocus = current;
+          meta[META_KEY] = current;
+        }
+        if (facesChanged) {
+          latest.current.savedFaces = currentFaces;
+          meta[META_FACES_KEY] = currentFaces;
+        }
 
         // Saving through the entity store keeps getMedia() in sync.
-        dispatch("core").saveEntityRecord("postType", "attachment", {
-          id,
-          meta: { [META_KEY]: current },
-        });
+        dispatch("core").saveEntityRecord("postType", "attachment", { id, meta });
       });
 
       return unsubscribe;
@@ -107,21 +129,13 @@ function withFocalPointPicker(OriginalComponent) {
           faces={faces}
           onFacesChange={setFaces}
         />
-        <FaceSuggest
-          src={imageMeta.source_url}
-          width={imageMeta.media_details?.width}
-          height={imageMeta.media_details?.height}
-          onFaces={setFaces}
-          faces={faces}
-          onSuggest={setFocalPoint}
-        />
         <Button
           variant="secondary"
           size="small"
           onClick={() => setModalOpen(true)}
           style={{ marginTop: 8 }}
         >
-          {__("Edit full screen", "focal-point-images-smart-crop")}
+          {__("Edit focal point", "focal-point-images-smart-crop")}
         </Button>
         {isModalOpen && (
           <FocalPointModal
@@ -139,6 +153,7 @@ function withFocalPointPicker(OriginalComponent) {
           />
         )}
         <OriginalComponent {...props} />
+        <hr className="noon-focal-featured-image__divider" />
       </div>
     );
   };

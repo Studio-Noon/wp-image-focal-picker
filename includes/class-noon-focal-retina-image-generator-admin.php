@@ -10,7 +10,8 @@ use League\Glide\ServerFactory;
 
 class Noon_Focal_Retina_Image_Generator_Admin {
 
-	const META = 'noon_focal_point';
+	const META       = 'noon_focal_point';
+	const META_FACES = 'noon_focal_point_faces';
 
 	private $plugin_name;
 	private $version;
@@ -49,6 +50,46 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			)
 		);
 
+		$box_schema = array(
+			'type'       => 'object',
+			'properties' => array(
+				'x' => array( 'type' => 'number', 'minimum' => 0, 'maximum' => 1 ),
+				'y' => array( 'type' => 'number', 'minimum' => 0, 'maximum' => 1 ),
+				'w' => array( 'type' => 'number', 'minimum' => 0, 'maximum' => 1 ),
+				'h' => array( 'type' => 'number', 'minimum' => 0, 'maximum' => 1 ),
+			),
+		);
+
+		register_post_meta(
+			'attachment',
+			self::META_FACES,
+			array(
+				'type'              => 'array',
+				'description'       => __( 'Faces found in the image (detected or manually added), used to steer the focal point and warn when a crop would cut through one.', 'noon-focus-crop' ),
+				'single'            => true,
+				'sanitize_callback' => array( __CLASS__, 'sanitize_faces' ),
+				'auth_callback'     => function ( $allowed, $meta_key, $post_id ) {
+					return current_user_can( 'edit_post', $post_id );
+				},
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array_merge(
+								$box_schema['properties'],
+								array(
+									'raw'    => $box_schema,
+									'score'  => array( 'type' => 'number', 'minimum' => 0, 'maximum' => 1 ),
+									'manual' => array( 'type' => 'boolean' ),
+								)
+							),
+						),
+					),
+				),
+			)
+		);
+
 	}
 
 	/**
@@ -73,6 +114,57 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		};
 
 		return array( 'x' => $clamp( $x ), 'y' => $clamp( $y ) );
+
+	}
+
+	/**
+	 * Normalise a face list: each entry needs a valid padded box (x, y, w, h)
+	 * and a valid `raw` box in the same shape; entries missing either are
+	 * dropped rather than guessed at, since there's no sane default for a
+	 * face's own position. `score` and `manual` are optional.
+	 */
+	public static function sanitize_faces( $value ) {
+
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$clamp = function ( $n ) {
+			return round( min( 1, max( 0, (float) $n ) ), 4 );
+		};
+
+		$box = function ( $box ) use ( $clamp ) {
+			if ( ! is_array( $box ) || ! isset( $box['x'], $box['y'], $box['w'], $box['h'] ) ) {
+				return null;
+			}
+			return array(
+				'x' => $clamp( $box['x'] ),
+				'y' => $clamp( $box['y'] ),
+				'w' => $clamp( $box['w'] ),
+				'h' => $clamp( $box['h'] ),
+			);
+		};
+
+		$faces = array();
+
+		foreach ( $value as $face ) {
+
+			$padded = $box( $face );
+			$raw    = is_array( $face ) ? $box( $face['raw'] ?? null ) : null;
+
+			if ( ! $padded || ! $raw ) {
+				continue;
+			}
+
+			$padded['raw']    = $raw;
+			$padded['score']  = isset( $face['score'] ) ? $clamp( $face['score'] ) : 1.0;
+			$padded['manual'] = ! empty( $face['manual'] );
+
+			$faces[] = $padded;
+
+		}
+
+		return $faces;
 
 	}
 
@@ -108,6 +200,16 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 
 	}
 
+	/**
+	 * Stored faces (detected or manually added) for an attachment, or an
+	 * empty array.
+	 */
+	public static function get_faces( $attachment_id ) {
+
+		return self::sanitize_faces( get_post_meta( $attachment_id, self::META_FACES, true ) );
+
+	}
+
 	/* ---------------------------------------------------------------------
 	 * Media modal fields
 	 * ------------------------------------------------------------------ */
@@ -119,6 +221,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		$focus = self::get_focus( $post->ID );
+		$faces = self::get_faces( $post->ID );
 		$meta  = wp_get_attachment_metadata( $post->ID );
 
 		ob_start();
@@ -142,15 +245,17 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 
 			<div class="Noon_Focal_Retina_Image_Generator_Template hidden">
 				<div class="Noon_Focal_Retina_Image_Generator_Dialog">
-					<div class="noon-focal-editor">
-						<div class="noon-focal-editor__stage">
-							<div class="Noon_Focal_Retina_Image_Generator_Wrapper">
-								<div class="noon-focal-stage-img"><?php echo wp_get_attachment_image( $post->ID, 'full' ); ?></div>
+					<div class="edit-attachment-frame noon-focal-frame">
+						<div class="attachment-details">
+							<div class="attachment-media-view">
+								<div class="thumbnail thumbnail-image">
+									<div class="noon-focal-stage-img"><img class="details-image" src="<?php echo esc_url( wp_get_attachment_image_url( $post->ID, 'full' ) ); ?>" draggable="false" alt="" /></div>
+									<p class="description"><?php esc_html_e( 'Click or drag the point to the most important part of the image. The crops follow it live; nothing is generated or saved until you apply.', 'noon-focus-crop' ); ?></p>
+								</div>
 							</div>
-							<p class="description"><?php esc_html_e( 'Click or drag the point to the most important part of the image. The crops follow it live; nothing is generated or saved until you apply.', 'noon-focus-crop' ); ?></p>
-						</div>
-						<div class="noon-focal-editor__previews Noon_Focal_Retina_Image_Generator_Previews noon-focal-size-previews noon-focal-size-previews--grid" data-src="<?php echo esc_url( wp_get_attachment_image_url( $post->ID, 'full' ) ); ?>">
-							<div class="previews noon-focal-size-previews__grid"></div>
+							<div class="attachment-info Noon_Focal_Retina_Image_Generator_Previews noon-focal-size-previews noon-focal-size-previews--grid" data-src="<?php echo esc_url( wp_get_attachment_image_url( $post->ID, 'full' ) ); ?>">
+								<div class="previews noon-focal-size-previews__grid"></div>
+							</div>
 						</div>
 					</div>
 					<footer class="actions">
@@ -159,6 +264,8 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 							<label><span><?php esc_html_e( 'Top (%)', 'noon-focus-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="y" /></label>
 						</div>
 						<button type="button" class="button detect-faces"><?php esc_html_e( 'Suggest from faces', 'noon-focus-crop' ); ?></button>
+						<button type="button" class="button add-face"><?php esc_html_e( 'Add face', 'noon-focus-crop' ); ?></button>
+						<button type="button" class="button toggle-previews"><?php esc_html_e( 'Hide crop previews', 'noon-focus-crop' ); ?></button>
 						<span class="faces-status description" aria-live="polite"></span>
 						<button type="button" class="button cancel"><?php esc_html_e( 'Cancel', 'noon-focus-crop' ); ?></button>
 						<button type="button" class="button apply"><?php esc_html_e( 'Apply', 'noon-focus-crop' ); ?></button>
@@ -171,6 +278,11 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 
 		// Prepend so the picker sits at the top of the attachment details.
 		$fields = array(
+			self::META_FACES => array(
+				'input' => 'hidden',
+				'label' => __( 'Faces', 'noon-focus-crop' ),
+				'value' => wp_json_encode( $faces ),
+			),
 			self::META . '_y' => array(
 				'input' => 'hidden',
 				'label' => __( 'Focal Point Y', 'noon-focus-crop' ),
@@ -204,6 +316,14 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			// update_post_meta() compares against the stored value, so an unchanged
 			// focal point (e.g. only the alt text was edited) does not purge the cache.
 			update_post_meta( $post['ID'], self::META, $focus );
+
+		}
+
+		if ( isset( $attachment[ self::META_FACES ] ) ) {
+
+			$faces = json_decode( (string) wp_unslash( $attachment[ self::META_FACES ] ), true );
+
+			update_post_meta( $post['ID'], self::META_FACES, self::sanitize_faces( $faces ) );
 
 		}
 
@@ -273,12 +393,9 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	}
 
 	/**
-	 * Expose the boxes the pickers preview, and where the face-detection
-	 * weights are, to a script as window.noonFocalPreview.
+	 * Expose preview sizes and face-detection availability as window.noonFocalPreview.
 	 */
 	private function localize_preview_sizes( $handle ) {
-
-		$models = plugin_dir_path( __DIR__ ) . 'admin/build/models/';
 
 		/**
 		 * Whether the pickers offer "Suggest from faces" (in-browser face
@@ -287,14 +404,13 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		 * @param bool $enabled
 		 */
 		$faces = apply_filters( 'noon_focal_face_detection', true )
-			&& file_exists( $models . 'tiny_face_detector_model-weights_manifest.json' );
+			&& file_exists( plugin_dir_path( __DIR__ ) . 'admin/build/face-api.js' );
 
 		wp_add_inline_script(
 			$handle,
 			'window.noonFocalPreview = ' . wp_json_encode( array(
 				'sizes'  => self::preview_sizes(),
 				'faces'  => (bool) $faces,
-				'models' => plugin_dir_url( __DIR__ ) . 'admin/build/models',
 			) ) . ';',
 			'before'
 		);
@@ -378,8 +494,56 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	}
 
 	/**
-	 * Multisite: save_mod_rewrite_rules() is a no-op, so the block has to be
-	 * added by hand. Show it until .htaccess contains it.
+	 * Multisite: save_mod_rewrite_rules() is a no-op, so write the block
+	 * ourselves. It is prepended rather than appended (insert_with_markers()
+	 * appends) because it must run before core's `-f` rule, which would
+	 * otherwise serve the original upload. Any existing copy is replaced, so
+	 * the block follows changes such as the signing secret appearing.
+	 *
+	 * @param bool $add False removes the block (deactivation).
+	 * @return bool Whether .htaccess now matches.
+	 */
+	public static function sync_multisite_htaccess( $add = true ) {
+
+		if ( ! is_multisite() ) {
+			return false;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+
+		$htaccess = get_home_path() . '.htaccess';
+
+		if ( ! got_mod_rewrite() || ! is_readable( $htaccess ) || ! wp_is_writable( $htaccess ) ) {
+			return false;
+		}
+
+		$existing = (string) file_get_contents( $htaccess );
+		$stripped = preg_replace( '/# BEGIN Focal Retina Image Generator.*?# END Focal Retina Image Generator\R*/s', '', $existing );
+		$contents = $add ? self::htaccess_rules() . PHP_EOL . $stripped : $stripped;
+
+		if ( $contents === $existing ) {
+			return true;
+		}
+
+		return false !== file_put_contents( $htaccess, $contents, LOCK_EX );
+
+	}
+
+	/**
+	 * Self-heal the multisite block for network admins, like the secret mirror.
+	 */
+	public function maybe_sync_multisite_htaccess() {
+
+		if ( is_multisite() && current_user_can( 'manage_network_options' ) ) {
+			self::sync_multisite_htaccess();
+		}
+
+	}
+
+	/**
+	 * Multisite fallback when .htaccess is not writable: show the block until
+	 * .htaccess contains it.
 	 */
 	public function htaccess_notice() {
 
