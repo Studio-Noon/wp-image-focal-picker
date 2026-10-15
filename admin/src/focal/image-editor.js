@@ -157,8 +157,9 @@ const ImageEditorFocal = ({
   overlayHost,
   controlsHost,
   previewsHost,
+  startActive = false,
 }) => {
-  const [active, setActive] = useState(false);
+  const [active, setActive] = useState(startActive);
   const [media, setMedia] = useState(null);
   const [mode, setMode] = useState("centre");
   const [point, setPoint] = useState(CENTRE);

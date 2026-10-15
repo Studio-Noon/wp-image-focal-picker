@@ -17,6 +17,63 @@ import { fetchMedia, isImage, readFocal } from "./data";
 
 const roots = new Map();
 
+// Images whose editor should open straight into Focal Point mode.
+const openInFocalMode = new Set();
+
+/**
+ * Open an image in a media modal on the "Edit image" screen with Focal Point
+ * mode on: the same editor as the media library, from anywhere wp.media is
+ * loaded (the block editor's featured image panel, for one). Leaving the
+ * editor (Cancel Editing, Back, or after Save Edits) closes the modal.
+ *
+ * @return {boolean} False when the media modal or image editor isn't loaded.
+ */
+export const openFocalEditor = (id) => {
+  const media = window.wp?.media;
+
+  if (!media?.controller?.EditImage || !media?.view?.EditImage || !window.imageEdit) {
+    return false;
+  }
+
+  const attachment = media.attachment(id);
+
+  attachment.fetch().then(() => {
+    const frame = new media.view.MediaFrame({
+      title: __("Edit focal point", "focal-point-images-smart-crop"),
+      state: "edit-image",
+      states: [new media.controller.EditImage({ model: attachment })],
+    });
+
+    frame.on("content:render:edit-image", () => {
+      const view = new media.view.EditImage({
+        model: attachment,
+        controller: frame,
+      }).render();
+
+      // There's no other state to go back to.
+      view.back = () => frame.close();
+      view.save = () => attachment.fetch().always(() => frame.close());
+
+      frame.content.set(view);
+      openInFocalMode.add(String(id));
+
+      // This first state renders while open() is still building the modal,
+      // before it's in the page, and imageEdit.open() finds its containers
+      // by id in the document: wait until the modal is open.
+      if (document.body.contains(view.el)) {
+        view.loadEditor();
+      } else {
+        frame.once("open", () => view.loadEditor());
+      }
+    });
+
+    frame.on("close", () => window.setTimeout(() => frame.remove(), 0));
+    frame.open();
+  });
+
+  return true;
+};
+
 // Unmount roots whose container a re-render (or closing the editor) removed.
 const sweep = () => {
   roots.forEach((root, el) => {
@@ -88,6 +145,7 @@ const addToImageEditor = (postId) => {
       overlayHost={overlayHost}
       controlsHost={controlsHost}
       previewsHost={previewsHost}
+      startActive={openInFocalMode.delete(String(postId))}
     />,
   );
 
@@ -95,6 +153,9 @@ const addToImageEditor = (postId) => {
 };
 
 export const watchMediaViews = () => {
+  // For the block editor bundle, which can't import from this one.
+  window.noonFocalOpenEditor = openFocalEditor;
+
   // Attachment details in the media grid and modals.
   const Compat = window.wp?.media?.view?.AttachmentCompat;
 
