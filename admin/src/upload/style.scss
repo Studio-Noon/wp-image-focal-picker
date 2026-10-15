@@ -81,37 +81,49 @@
 .noon-focal-imgedit__face {
   position: absolute;
   pointer-events: none;
-  border: 2px solid #00a32a;
+  border: 2px solid #dba617;
   border-radius: 2px;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 30%);
 
   &.is-manual {
-    border-color: #dba617;
+    border-style: dashed;
+  }
+
+  &.is-selected {
+    border-color: var(--wp-admin-theme-color, #3858e9);
+    box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--wp-admin-theme-color, #3858e9);
   }
 }
 
 .noon-focal-imgedit__remove {
   position: absolute;
-  top: -10px;
-  right: -10px;
+  top: -12px;
+  right: -12px;
   // Above the focal handle, which often sits near a face.
   z-index: 2;
-  width: 20px;
-  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  font-size: 14px;
-  line-height: 16px;
   color: #fff;
   pointer-events: auto;
   cursor: pointer;
-  background: #d63638;
+  background: #cc1818;
   border: 2px solid #fff;
   border-radius: 50%;
   box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
 
+  .dashicons {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+
   &:hover,
   &:focus-visible {
-    background: #b32d2e;
+    background: #a51515;
     outline: 2px solid var(--wp-admin-theme-color, #3858e9);
     outline-offset: 1px;
   }
@@ -124,39 +136,133 @@
   border: 2px dashed #dba617;
 }
 
-// Settings column
-.noon-focal-imgedit__help,
-.noon-focal-imgedit__status {
-  color: #646970;
+// Settings column: wider than core's 240px while Focal Point is open, and
+// a divider between it and the crop previews.
+.imgedit-settings:has(> .noon-focal-imgedit:not([hidden])) {
+  flex: 0 1 340px;
+  max-width: 340px;
+  padding-right: 20px;
+  border-right: 1px solid #dcdcde;
 }
 
-.noon-focal-imgedit__coords {
-  font-variant-numeric: tabular-nums;
-}
-
-.noon-focal-imgedit__faces {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
-
+.noon-focal-imgedit__panel {
   p {
     margin: 0;
   }
 }
 
-.noon-focal-imgedit__buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.noon-focal-imgedit__wide {
+  justify-content: center;
+  width: 100%;
 }
 
-.noon-focal-imgedit__previews-toggle {
+.noon-focal-imgedit__face-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  // Two and a half rows (44px thumb + 2 × 8px padding + 2px border, 8px gaps),
+  // so a cut-off row shows there's more to scroll to.
+  &.is-scrollable {
+    max-height: calc(2.5 * 62px + 2 * 8px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+
+    &:focus-visible {
+      outline: 2px solid var(--wp-admin-theme-color, #3858e9);
+      outline-offset: 2px;
+    }
+  }
+}
+
+// Card-like row: select area (thumbnail + label) and a remove button.
+.noon-focal-imgedit__face-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 4px 0 12px;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 8px 8px 0;
+  background: #fff;
+  border: 1px solid #dcdcde;
+  border-radius: 2px;
+
+  &.is-selected {
+    border-color: var(--wp-admin-theme-color, #3858e9);
+    box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color, #3858e9);
+  }
+
+  &.is-add {
+    padding-right: 8px;
+  }
+}
+
+.noon-focal-imgedit__face-select {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin: -8px 0;
+  padding: 8px 0 8px 8px;
+  text-align: left;
+  color: #1e1e1e;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 2px;
+
+  &:focus-visible {
+    outline: 2px solid var(--wp-admin-theme-color, #3858e9);
+    outline-offset: -2px;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
+.noon-focal-imgedit__face-thumb {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  background-color: #f0f0f1;
+  background-repeat: no-repeat;
+  border-radius: 2px;
+
+  &.is-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--wp-admin-theme-color, #3858e9);
+  }
+}
+
+.noon-focal-imgedit__face-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.noon-focal-imgedit__face-meta {
+  font-size: 12px;
+  font-weight: 400;
+  color: #757575;
+}
+
+.noon-focal-imgedit__chip {
+  padding: 6px 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #1e1e1e;
+  background: #f0f0f0;
+  border-radius: 2px;
 }
 
 // Crop previews: grows into the space right of the settings column, or wraps
@@ -167,8 +273,7 @@
   max-height: 75vh;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 0 4px 0 20px;
-  border-left: 1px solid #dcdcde;
+  padding: 0 4px 0 0;
 
   &[hidden] {
     display: none;

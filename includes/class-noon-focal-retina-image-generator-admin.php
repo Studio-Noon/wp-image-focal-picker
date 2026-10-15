@@ -786,8 +786,25 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 * Core refuses to build a srcset when the attachment has no generated sizes
 	 * (uploads that predate the plugin). Register the original as a size so the
 	 * candidates below are still produced.
+	 *
+	 * Core also drops the srcset unless the src contains the metadata's file.
+	 * Glide URLs point at noon_focal_source_file(), which for a "-scaled" upload
+	 * is the original rather than the attached file, so describe that instead.
 	 */
 	public function wp_calculate_image_srcset_meta( $image_meta, $size_array, $image_src, $attachment_id ) {
+
+		$source = noon_focal_source_file( $attachment_id );
+
+		if ( $source && ! empty( $image_meta['file'] ) && $source !== $image_meta['file'] && false !== strpos( $image_src, wp_basename( $source ) ) ) {
+			list( $width, $height ) = noon_focal_source_size( $attachment_id );
+
+			$image_meta['file'] = $source;
+
+			if ( $width > 0 && $height > 0 ) {
+				$image_meta['width']  = $width;
+				$image_meta['height'] = $height;
+			}
+		}
 
 		if ( empty( $image_meta['sizes'] ) && ! empty( $image_meta['file'] ) && ! empty( $image_meta['width'] ) ) {
 			$image_meta['sizes'] = array(
@@ -828,7 +845,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		$fit     = self::get_fit( $attachment_id );
-		$max     = (int) ( $image_meta['width'] ?? 0 );
+		$max     = noon_focal_source_size( $attachment_id )[0];
 		$sources = array();
 
 		foreach ( self::dprs() as $dpr ) {
@@ -946,8 +963,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 */
 	private function picture_sources( $attachment_id, array $breakpoints ) {
 
-		$meta = wp_get_attachment_metadata( $attachment_id );
-		$max  = (int) ( $meta['width'] ?? 0 );
+		$max  = noon_focal_source_size( $attachment_id )[0];
 		$fit  = self::get_fit( $attachment_id );
 		$html = '';
 

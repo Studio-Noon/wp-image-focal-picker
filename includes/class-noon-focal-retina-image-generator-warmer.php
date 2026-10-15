@@ -60,8 +60,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 	public function variants( $attachment_id ) {
 
 		$file = noon_focal_source_path( $attachment_id );
-		$meta = wp_get_attachment_metadata( $attachment_id );
-		$max  = (int) ( $meta['width'] ?? 0 );
+		$max  = noon_focal_source_size( $attachment_id )[0];
 
 		if ( ! $file ) {
 			return array();

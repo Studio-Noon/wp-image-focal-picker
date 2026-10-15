@@ -8,6 +8,13 @@
  */
 import { __, sprintf } from "@wordpress/i18n";
 import { useEffect, useRef, useState } from "@wordpress/element";
+import {
+  Button,
+  SearchControl,
+  SelectControl,
+  __experimentalHStack as HStack,
+  __experimentalText as Text,
+} from "@wordpress/components";
 
 import { cropPosition, previewSizes } from "../crop-position";
 import { faceCoverage, faceBadge } from "../faces";
@@ -52,35 +59,39 @@ export default function SizePreviews({
       )}
       {filterable && (
         <div className="noon-focal-size-previews__filters">
-          <label>
-            <span>{__("Find a size", "focal-point-images-smart-crop")}</span>
-            <input
-              type="search"
+          <div className="noon-focal-size-previews__filter-controls">
+            <SearchControl
+              __nextHasNoMarginBottom
+              __next40pxDefaultSize
+              label={__("Find a size", "focal-point-images-smart-crop")}
+              hideLabelFromVision={false}
+              placeholder={__("Search by name", "focal-point-images-smart-crop")}
               value={query}
-              placeholder={__("Name or dimensions…", "focal-point-images-smart-crop")}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={setQuery}
             />
-          </label>
-          <label>
-            <span>{__("Shape", "focal-point-images-smart-crop")}</span>
-            <select value={shape} onChange={(event) => setShape(event.target.value)}>
-              {shapeOptions().map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <div className="noon-focal-size-previews__filter-status">
-            <span role="status">{resultsMessage(visibleSizes.length, sizes.length)}</span>
-            {(query || shape !== "all") && (
-              <button type="button" className="button-link" onClick={() => { setQuery(""); setShape("all"); }}>
-                {__("Clear filters", "focal-point-images-smart-crop")}
-              </button>
-            )}
+            <SelectControl
+              __nextHasNoMarginBottom
+              __next40pxDefaultSize
+              label={__("Orientation", "focal-point-images-smart-crop")}
+              value={shape}
+              options={shapeOptions()}
+              onChange={setShape}
+            />
           </div>
+          <HStack className="noon-focal-size-previews__filter-status">
+            <Text variant="muted" role="status">
+              {resultsMessage(visibleSizes.length, sizes.length)}
+            </Text>
+            {(query || shape !== "all") && (
+              <Button variant="link" onClick={() => { setQuery(""); setShape("all"); }}>
+                {__("Clear filters", "focal-point-images-smart-crop")}
+              </Button>
+            )}
+          </HStack>
         </div>
       )}
       {!visibleSizes.length && (
-        <p className="description">{__("No sizes match. Try another search or clear the filters.", "focal-point-images-smart-crop")}</p>
+        <Text as="p" variant="muted">{__("No sizes match. Try another search or clear the filters.", "focal-point-images-smart-crop")}</Text>
       )}
       <div className="noon-focal-size-previews__grid">
         {visibleSizes.map((size) => {
@@ -102,7 +113,7 @@ export default function SizePreviews({
             >
               <span
                 className="noon-focal-size-previews__box"
-                style={{ aspectRatio: `${size.w} / ${size.h}`, maxWidth: layout === "grid" ? `${220 * size.w / size.h}px` : undefined }}
+                style={{ aspectRatio: `${size.w} / ${size.h}` }}
               >
                 <img
                   src={src}
@@ -120,9 +131,9 @@ export default function SizePreviews({
               </span>
               <figcaption>
                 <strong>{size.label}</strong> {size.w}×{size.h}
-                <button
-                  type="button"
-                  className="button-link noon-focal-size-previews__expand"
+                <Button
+                  variant="link"
+                  className="noon-focal-size-previews__expand"
                   aria-haspopup="dialog"
                   aria-label={sprintf(
                     /* translators: %s: image size name. */
@@ -140,7 +151,7 @@ export default function SizePreviews({
                   }}
                 >
                   {__("Expand preview", "focal-point-images-smart-crop")}
-                </button>
+                </Button>
               </figcaption>
             </figure>
           );

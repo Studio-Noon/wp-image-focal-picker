@@ -35,6 +35,13 @@ if ( ! defined( 'NOON_FOCAL_UPLOADS_DIR' ) ) {
 	define( 'NOON_FOCAL_UPLOADS_DIR', NOON_FOCAL_CONTENT_DIR . '/uploads' );
 }
 
+// JPEG/WebP quality for every rendition. Defined here, not in WordPress,
+// because media.php reads it without booting WordPress. Changing it changes
+// the cache keys, so old renditions are left behind until the cache is cleared.
+if ( ! defined( 'NOON_FOCAL_QUALITY' ) ) {
+	define( 'NOON_FOCAL_QUALITY', 85 );
+}
+
 if ( ! function_exists( 'noon_focal_webp_supported' ) ) {
 
 	function noon_focal_webp_supported() {
@@ -66,7 +73,7 @@ if ( ! function_exists( 'noon_focal_webp_supported' ) ) {
 
 		// PNG/GIF keep their format (transparency, animation); everything else becomes JPEG.
 		$params = array(
-			'q'  => 80,
+			'q'  => (int) NOON_FOCAL_QUALITY,
 			'dpr' => 1,
 			'fm' => in_array( $extension, array( 'png', 'gif' ), true ) ? $extension : 'jpg',
 		);

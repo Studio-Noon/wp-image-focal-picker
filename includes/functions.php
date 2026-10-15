@@ -21,22 +21,26 @@ use League\Glide\Urls\UrlBuilderFactory;
  */
 function noon_focal_glide_url( $attachment_id, array $params ) {
 
-	static $builder = null;
+	// One builder per uploads URL: each site in a network has its own, and
+	// templates switch_to_blog() to show other sites' images mid-page.
+	static $builders = array();
 
-	$file = get_post_meta( $attachment_id, '_wp_attached_file', true );
+	$file = noon_focal_source_file( $attachment_id );
 
 	if ( ! $file || ! noon_focal_is_raster( $file ) ) {
 		return '';
 	}
 
-	if ( null === $builder ) {
+	$baseurl = wp_get_upload_dir()['baseurl'];
+
+	if ( ! isset( $builders[ $baseurl ] ) ) {
 		// Glide signs only the path component, which is what media.php checks.
-		$builder = defined( 'NOON_IMAGE_SECRET' )
-			? UrlBuilderFactory::create( wp_get_upload_dir()['baseurl'], NOON_IMAGE_SECRET )
-			: UrlBuilderFactory::create( wp_get_upload_dir()['baseurl'] );
+		$builders[ $baseurl ] = defined( 'NOON_IMAGE_SECRET' )
+			? UrlBuilderFactory::create( $baseurl, NOON_IMAGE_SECRET )
+			: UrlBuilderFactory::create( $baseurl );
 	}
 
-	return $builder->getUrl( $file, $params );
+	return $builders[ $baseurl ]->getUrl( $file, $params );
 
 }
 
@@ -47,7 +51,7 @@ function noon_focal_glide_url( $attachment_id, array $params ) {
  */
 function noon_focal_source_path( $attachment_id ) {
 
-	$file = get_post_meta( $attachment_id, '_wp_attached_file', true );
+	$file = noon_focal_source_file( $attachment_id );
 
 	if ( ! $file ) {
 		return '';
@@ -57,6 +61,97 @@ function noon_focal_source_path( $attachment_id ) {
 	$base     = trailingslashit( wp_normalize_path( NOON_FOCAL_UPLOADS_DIR ) );
 
 	return 0 === strpos( $absolute, $base ) ? substr( $absolute, strlen( $base ) ) : $file;
+
+}
+
+/**
+ * The file Glide renders from, relative to the site's uploads directory.
+ *
+ * WordPress shrinks big uploads to a "-scaled" copy (2560px by default) and
+ * attaches that, keeping the untouched upload as meta['original_image']. The
+ * original is used instead, so large boxes and 2x renditions aren't capped at
+ * the scaled copy. Only when the attached file is exactly that scaled copy:
+ * after an edit in the image editor the attached file is the edited image,
+ * which must stay the source.
+ */
+function noon_focal_source_file( $attachment_id ) {
+
+	static $resolved = array();
+
+	$file = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
+	$key  = get_current_blog_id() . '|' . (int) $attachment_id . '|' . $file;
+
+	if ( isset( $resolved[ $key ] ) ) {
+		return $resolved[ $key ];
+	}
+
+	$source = $file;
+	$meta   = $file ? wp_get_attachment_metadata( $attachment_id ) : null;
+	$name   = is_array( $meta ) ? (string) ( $meta['original_image'] ?? '' ) : '';
+
+	if ( $name ) {
+		$extension = pathinfo( $name, PATHINFO_EXTENSION );
+		$scaled    = pathinfo( $name, PATHINFO_FILENAME ) . '-scaled' . ( '' !== $extension ? '.' . $extension : '' );
+
+		if ( wp_basename( $file ) === $scaled ) {
+			$dir       = dirname( $file );
+			$candidate = ( '.' === $dir ? '' : trailingslashit( $dir ) ) . $name;
+
+			if ( noon_focal_is_raster( $candidate ) && is_file( trailingslashit( wp_get_upload_dir()['basedir'] ) . $candidate ) ) {
+				$source = $candidate;
+			}
+		}
+	}
+
+	$resolved[ $key ] = $source;
+
+	return $source;
+
+}
+
+/**
+ * [width, height] of the file Glide renders from (noon_focal_source_file()),
+ * as displayed: Glide auto-orients, so EXIF rotations swap the sides. Falls
+ * back to the attachment metadata, which describes the attached file.
+ */
+function noon_focal_source_size( $attachment_id ) {
+
+	$meta     = wp_get_attachment_metadata( $attachment_id );
+	$fallback = array( (int) ( $meta['width'] ?? 0 ), (int) ( $meta['height'] ?? 0 ) );
+	$source   = noon_focal_source_file( $attachment_id );
+
+	if ( ! $source || get_post_meta( $attachment_id, '_wp_attached_file', true ) === $source ) {
+		return $fallback;
+	}
+
+	// Keyed by file, so a replaced or re-scaled upload is measured again.
+	$cached = get_post_meta( $attachment_id, '_noon_focal_source_size', true );
+
+	if ( is_array( $cached ) && ( $cached['file'] ?? '' ) === $source && ! empty( $cached['w'] ) && ! empty( $cached['h'] ) ) {
+		return array( (int) $cached['w'], (int) $cached['h'] );
+	}
+
+	$path = trailingslashit( wp_get_upload_dir()['basedir'] ) . $source;
+	$info = wp_getimagesize( $path );
+
+	if ( ! $info || empty( $info[0] ) || empty( $info[1] ) ) {
+		return $fallback;
+	}
+
+	list( $w, $h ) = $info;
+
+	if ( 'image/jpeg' === ( $info['mime'] ?? '' ) && function_exists( 'exif_read_data' ) ) {
+		$exif        = @exif_read_data( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- corrupt EXIF only means no rotation.
+		$orientation = (int) ( $exif['Orientation'] ?? 1 );
+
+		if ( $orientation >= 5 && $orientation <= 8 ) {
+			list( $w, $h ) = array( $h, $w );
+		}
+	}
+
+	update_post_meta( $attachment_id, '_noon_focal_source_size', array( 'file' => $source, 'w' => (int) $w, 'h' => (int) $h ) );
+
+	return array( (int) $w, (int) $h );
 
 }
 
@@ -108,8 +203,7 @@ function noon_focal_dimensions( $attachment_id, $size ) {
 		return null;
 	}
 
-	$meta = wp_get_attachment_metadata( $attachment_id );
-	$orig = array( (int) ( $meta['width'] ?? 0 ), (int) ( $meta['height'] ?? 0 ) );
+	$orig = noon_focal_source_size( $attachment_id );
 
 	if ( $box['crop'] && $box['w'] > 0 && $box['h'] > 0 ) {
 		return array( 'w' => $box['w'], 'h' => $box['h'] );
@@ -280,8 +374,7 @@ function noon_focal_responsive_candidates( $attachment_id, $name ) {
 
 	$widths[] = $box['w'];
 
-	$meta = wp_get_attachment_metadata( $attachment_id );
-	$max  = (int) ( $meta['width'] ?? 0 );
+	$max = noon_focal_source_size( $attachment_id )[0];
 
 	$candidates = array();
 

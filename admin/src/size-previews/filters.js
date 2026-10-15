@@ -2,7 +2,7 @@ import { __, sprintf } from '@wordpress/i18n';
 
 export function shapeOptions() {
 	return [
-		{ value: 'all', label: __( 'All shapes', 'focal-point-images-smart-crop' ) },
+		{ value: 'all', label: __( 'All crops', 'focal-point-images-smart-crop' ) },
 		{ value: 'landscape', label: __( 'Landscape', 'focal-point-images-smart-crop' ) },
 		{ value: 'portrait', label: __( 'Portrait', 'focal-point-images-smart-crop' ) },
 		{ value: 'square', label: __( 'Square', 'focal-point-images-smart-crop' ) },

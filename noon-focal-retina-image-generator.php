@@ -6,7 +6,7 @@
  * @wordpress-plugin
  * Plugin Name:       Studio Noon Focus Crop
  * Description:       Set a focal point on any image and get smart-cropped, responsive, retina and WebP image sizes generated on the fly. No more regenerating thumbnails.
- * Version:           1.3.11
+ * Version:           1.3.14
  * Author:            Studio Noon
  * Author URI:        https://noon.studio
  * License:           GPLv2 or later
