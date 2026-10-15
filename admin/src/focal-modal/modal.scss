@@ -77,3 +77,8 @@
     }
   }
 }
+
+// Opened from the media library details, inside the media modal (z-index 160000).
+.noon-focal-modal-overlay.components-modal__screen-overlay {
+  z-index: 170000;
+}

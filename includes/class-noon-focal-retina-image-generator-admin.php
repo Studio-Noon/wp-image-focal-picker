@@ -10,11 +10,20 @@ use League\Glide\ServerFactory;
 
 class Noon_Focal_Retina_Image_Generator_Admin {
 
-	const META       = 'noon_focal_point';
-	const META_FACES = 'noon_focal_point_faces';
+	const META        = 'noon_focal_point';
+	const META_FACES  = 'noon_focal_point_faces';
+	const META_SOURCE = 'noon_focal_point_source';
 
 	private $plugin_name;
 	private $version;
+
+	/**
+	 * Focal points that apply for the length of a render only, keyed by
+	 * attachment ID: a block's own point (see content_img_tag()).
+	 *
+	 * @var array<int, array>
+	 */
+	private static $focus_overrides = array();
 
 	public function __construct( $plugin_name, $version ) {
 		$this->plugin_name = $plugin_name;
@@ -85,6 +94,28 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 								)
 							),
 						),
+					),
+				),
+			)
+		);
+
+			register_post_meta(
+			'attachment',
+			self::META_SOURCE,
+			array(
+				'type'              => 'string',
+				'description'       => __( 'How the focal point was set: auto (face detection), manual, or stale (image edited since detection).', 'noon-focus-crop' ),
+				'single'            => true,
+				'sanitize_callback' => function ( $value ) {
+					return in_array( $value, array( 'auto', 'manual', 'stale' ), true ) ? $value : '';
+				},
+				'auth_callback'     => function ( $allowed, $meta_key, $post_id ) {
+					return current_user_can( 'edit_post', $post_id );
+				},
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+						'enum' => array( '', 'auto', 'manual', 'stale' ),
 					),
 				),
 			)
@@ -173,6 +204,10 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 */
 	public static function get_focus( $attachment_id ) {
 
+		if ( isset( self::$focus_overrides[ (int) $attachment_id ] ) ) {
+			return self::$focus_overrides[ (int) $attachment_id ];
+		}
+
 		$focus = get_post_meta( $attachment_id, self::META, true );
 
 		if ( ! is_array( $focus ) || ( ! isset( $focus['x'], $focus['y'] ) && ! isset( $focus[0], $focus[1] ) ) ) {
@@ -214,96 +249,10 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 * Media modal fields
 	 * ------------------------------------------------------------------ */
 
-	public function attachment_fields_to_edit( $fields, $post ) {
-
-		if ( ! wp_attachment_is_image( $post ) ) {
-			return $fields;
-		}
-
-		$focus = self::get_focus( $post->ID );
-		$faces = self::get_faces( $post->ID );
-		$meta  = wp_get_attachment_metadata( $post->ID );
-
-		ob_start();
-		?>
-		<div class="Noon_Focal_Retina_Container" data-width="<?php echo (int) ( $meta['width'] ?? 0 ); ?>" data-height="<?php echo (int) ( $meta['height'] ?? 0 ); ?>">
-			<div class="focal-preview">
-				<?php echo wp_get_attachment_image( $post->ID, 'full', false, array( 'class' => 'img-fluid preview', 'draggable' => 'false' ) ); ?>
-				<img
-					draggable="false"
-					id="focal-preview-icon"
-					class="icon"
-					alt=""
-					style="left: <?php echo esc_attr( $focus['x'] * 100 ); ?>%; top: <?php echo esc_attr( $focus['y'] * 100 ); ?>%;"
-					src="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3e %3cg fill='none' fill-rule='evenodd'%3e %3ccircle id='a' cx='10' cy='10' r='10' fill='black' fill-opacity='.3' /%3e %3ccircle cx='10' cy='10' r='9' stroke='white' stroke-opacity='.8' stroke-width='2'/%3e %3c/g%3e%3c/svg%3e"
-				/>
-			</div>
-
-			<button type="button" class="noon_edit_focalpoint button" data-attachment-id="<?php echo esc_attr( $post->ID ); ?>">
-				<?php esc_html_e( 'Edit Focal Point', 'noon-focus-crop' ); ?>
-			</button>
-
-			<div class="Noon_Focal_Retina_Image_Generator_Template hidden">
-				<div class="Noon_Focal_Retina_Image_Generator_Dialog">
-					<div class="edit-attachment-frame noon-focal-frame">
-						<div class="attachment-details">
-							<div class="attachment-media-view">
-								<div class="thumbnail thumbnail-image">
-									<div class="noon-focal-stage-img"><img class="details-image" src="<?php echo esc_url( wp_get_attachment_image_url( $post->ID, 'full' ) ); ?>" draggable="false" alt="" /></div>
-									<p class="description"><?php esc_html_e( 'Click or drag the point to the most important part of the image. The crops follow it live; nothing is generated or saved until you apply.', 'noon-focus-crop' ); ?></p>
-								</div>
-							</div>
-							<div class="attachment-info Noon_Focal_Retina_Image_Generator_Previews noon-focal-size-previews noon-focal-size-previews--grid" data-src="<?php echo esc_url( wp_get_attachment_image_url( $post->ID, 'full' ) ); ?>">
-								<div class="previews noon-focal-size-previews__grid"></div>
-							</div>
-						</div>
-					</div>
-					<footer class="actions">
-						<div class="noon-focal-coordinates">
-							<label><span><?php esc_html_e( 'Left (%)', 'noon-focus-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="x" /></label>
-							<label><span><?php esc_html_e( 'Top (%)', 'noon-focus-crop' ); ?></span><input type="number" min="0" max="100" step="0.1" data-focal-axis="y" /></label>
-						</div>
-						<button type="button" class="button detect-faces"><?php esc_html_e( 'Suggest from faces', 'noon-focus-crop' ); ?></button>
-						<button type="button" class="button add-face"><?php esc_html_e( 'Add face', 'noon-focus-crop' ); ?></button>
-						<button type="button" class="button toggle-previews"><?php esc_html_e( 'Hide crop previews', 'noon-focus-crop' ); ?></button>
-						<span class="faces-status description" aria-live="polite"></span>
-						<button type="button" class="button cancel"><?php esc_html_e( 'Cancel', 'noon-focus-crop' ); ?></button>
-						<button type="button" class="button apply"><?php esc_html_e( 'Apply', 'noon-focus-crop' ); ?></button>
-					</footer>
-				</div>
-			</div>
-		</div>
-		<?php
-		$html = ob_get_clean();
-
-		// Prepend so the picker sits at the top of the attachment details.
-		$fields = array(
-			self::META_FACES => array(
-				'input' => 'hidden',
-				'label' => __( 'Faces', 'noon-focus-crop' ),
-				'value' => wp_json_encode( $faces ),
-			),
-			self::META . '_y' => array(
-				'input' => 'hidden',
-				'label' => __( 'Focal Point Y', 'noon-focus-crop' ),
-				'value' => $focus['y'],
-			),
-			self::META . '_x' => array(
-				'input' => 'hidden',
-				'label' => __( 'Focal Point X', 'noon-focus-crop' ),
-				'value' => $focus['x'],
-			),
-			self::META        => array(
-				'input' => 'html',
-				'label' => __( 'Focal Point Picker', 'noon-focus-crop' ),
-				'html'  => $html,
-			),
-		) + $fields;
-
-		return $fields;
-
-	}
-
+	/**
+	 * Legacy form fields (noon_focal_point_x / _y / _faces). The current UI
+	 * saves over REST; this keeps any custom form posting them working.
+	 */
 	public function attachment_fields_to_save( $post, $attachment ) {
 
 		if ( isset( $attachment[ self::META . '_x' ], $attachment[ self::META . '_y' ] ) ) {
@@ -328,6 +277,82 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		return $post;
+
+	}
+
+	/**
+	 * Editing the image (crop, rotate, flip) moves what's in the frame, so an
+	 * automatically detected point is out of date: mark it for re-detection
+	 * (the media library re-runs it the next time the image is opened). A
+	 * point set by hand is left alone.
+	 */
+	public function image_edited( $saved, $filename, $image, $mime_type, $post_id ) {
+
+		if ( 'auto' === get_post_meta( $post_id, self::META_SOURCE, true ) ) {
+			update_post_meta( $post_id, self::META_SOURCE, 'stale' );
+		}
+
+		return $saved;
+
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Block focal points
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * An Image or Media & Text block with its own focal point ("just this
+	 * block" in the editor) marks its <img> with it, for content_img_tag() to
+	 * crop that one image by.
+	 */
+	public function render_block_focal_point( $block_content, $block ) {
+
+		$name = $block['blockName'] ?? '';
+
+		if ( ! in_array( $name, array( 'core/image', 'core/media-text' ), true ) ) {
+			return $block_content;
+		}
+
+		$focus = $block['attrs']['focalPoint'] ?? null;
+
+		if ( ! is_array( $focus ) || ! isset( $focus['x'], $focus['y'] ) || ! class_exists( 'WP_HTML_Tag_Processor' ) ) {
+			return $block_content;
+		}
+
+		$tag = new WP_HTML_Tag_Processor( $block_content );
+
+		if ( ! $tag->next_tag( 'img' ) ) {
+			return $block_content;
+		}
+
+		$focus = self::sanitize_focus( $focus );
+		$tag->set_attribute( 'data-noon-focal', $focus['x'] . ',' . $focus['y'] );
+
+		return $tag->get_updated_html();
+
+	}
+
+	/**
+	 * Run $callback with a focal point standing in for the attachment's own.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	public static function with_focus( $attachment_id, array $focus, callable $callback ) {
+
+		$attachment_id = (int) $attachment_id;
+		$previous      = self::$focus_overrides[ $attachment_id ] ?? null;
+
+		self::$focus_overrides[ $attachment_id ] = self::sanitize_focus( $focus );
+
+		try {
+			return $callback();
+		} finally {
+			if ( null === $previous ) {
+				unset( self::$focus_overrides[ $attachment_id ] );
+			} else {
+				self::$focus_overrides[ $attachment_id ] = $previous;
+			}
+		}
 
 	}
 
@@ -358,6 +383,25 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 
 	}
 
+	/**
+	 * Enqueue an extra stylesheet from admin/build, versioned like its entry.
+	 */
+	private function enqueue_built_style( $handle, $name, $style_file, $style_deps = array() ) {
+
+		$build = plugin_dir_path( __DIR__ ) . 'admin/build/';
+
+		if ( ! file_exists( $build . $style_file ) ) {
+			return;
+		}
+
+		$asset = file_exists( $build . $name . '.asset.php' )
+			? require $build . $name . '.asset.php'
+			: array( 'version' => $this->version );
+
+		wp_enqueue_style( $handle, plugin_dir_url( __DIR__ ) . 'admin/build/' . $style_file, $style_deps, $asset['version'] );
+
+	}
+
 	public function editor_assets() {
 		$this->enqueue_built_asset( $this->plugin_name, 'index', array(), 'index.css', array( 'wp-edit-blocks' ) );
 		$this->localize_preview_sizes( $this->plugin_name );
@@ -383,10 +427,12 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		$this->enqueue_built_asset(
 			$this->plugin_name . '_media',
 			'media',
-			array( 'jquery', 'media-editor', 'jquery-ui-dialog' ),
-			'style-media.css',
-			array( 'wp-jquery-ui-dialog' )
+			array( 'jquery', 'media-views', 'image-edit' ),
+			'style-media.css'
 		);
+
+		// Component styles (focal point modal, size previews, face outlines).
+		$this->enqueue_built_style( $this->plugin_name . '_media-components', 'media', 'media.css', array( 'wp-components' ) );
 
 		$this->localize_preview_sizes( $this->plugin_name . '_media' );
 
@@ -628,6 +674,36 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		if ( ! $attachment_id || ! class_exists( 'WP_HTML_Tag_Processor' ) || ! wp_attachment_is_image( $attachment_id ) ) {
 			return $image;
 		}
+
+		// A block's own focal point (render_block_focal_point()): crop this
+		// image by it instead of the attachment's.
+		$tag = new WP_HTML_Tag_Processor( $image );
+
+		if ( $tag->next_tag( 'img' ) && null !== $tag->get_attribute( 'data-noon-focal' ) ) {
+
+			$parts = array_map( 'floatval', explode( ',', (string) $tag->get_attribute( 'data-noon-focal' ) ) );
+			$tag->remove_attribute( 'data-noon-focal' );
+			$image = $tag->get_updated_html();
+
+			if ( 2 === count( $parts ) ) {
+				return self::with_focus(
+					$attachment_id,
+					array( 'x' => $parts[0], 'y' => $parts[1] ),
+					function () use ( $image, $context, $attachment_id ) {
+						return $this->content_img_tag_with_focus( $image, $context, $attachment_id );
+					}
+				);
+			}
+		}
+
+		return $this->content_img_tag_with_focus( $image, $context, $attachment_id );
+
+	}
+
+	/**
+	 * content_img_tag() for the focal point in effect.
+	 */
+	private function content_img_tag_with_focus( $image, $context, $attachment_id ) {
 
 		$tag = new WP_HTML_Tag_Processor( $image );
 

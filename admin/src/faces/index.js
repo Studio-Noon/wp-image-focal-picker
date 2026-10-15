@@ -12,6 +12,7 @@ import { previewSizes } from "../crop-position";
 import { detectFaces, faceDetectionAvailable, pad } from "./detect";
 import { suggestFocus } from "./suggest";
 import { facesMessage, facesSelectionMessage } from "./messages";
+import { describeDetection, mergeDetectedFaces } from "../focal/data";
 import "./faces.scss";
 
 // Default size for a manually-added face: a square this fraction of the
@@ -50,13 +51,16 @@ export function FaceSuggest({ src, width, height, faces, onFaces, onSuggest }) {
     setBusy(true);
     setMessage(__("Looking for faces…", "focal-point-images-smart-crop"));
     try {
-      const faces = await detectFaces(src);
-      onFaces(faces);
-      const point = suggestFocus(faces, width, height, previewSizes());
+      // Faces added by hand are kept; earlier detections are replaced.
+      const result = mergeDetectedFaces(faces, await detectFaces(src));
+      onFaces(result.faces);
+      const point = suggestFocus(result.faces, width, height, previewSizes());
       if (point) {
         onSuggest(point);
       }
-      setMessage(facesMessage(faces));
+      setMessage(
+        result.manual ? describeDetection(result) : facesMessage(result.faces),
+      );
     } catch (e) {
       setMessage(
         __("Face detection failed.", "focal-point-images-smart-crop") +

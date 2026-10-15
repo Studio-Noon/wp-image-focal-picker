@@ -1,153 +1,152 @@
 import { useState, useEffect, useRef } from "@wordpress/element";
 import { Button } from "@wordpress/components";
 import { __ } from "@wordpress/i18n";
-import { useSelect, subscribe, select, dispatch } from "@wordpress/data";
 import { addFilter } from "@wordpress/hooks";
 
 import FocalPointModal from "../focal-modal";
 import { FocalPicker } from "../faces";
+import {
+  CENTRE,
+  fetchMedia,
+  imageDimensions,
+  onFocalSaved,
+  readFocal,
+  saveFocal,
+} from "../focal/data";
 import "./editor.scss";
 
-const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
-const META_KEY = "noon_focal_point";
-const META_FACES_KEY = "noon_focal_point_faces";
-
-const isFocus = (value) =>
-  value && typeof value.x === "number" && typeof value.y === "number";
-
-const facesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const SAVE_DELAY = 400;
 
 /**
- * Adds a focal point picker above the featured image panel and saves the
- * chosen point to the attachment's meta when the post is saved.
+ * Focal point picker above the featured image panel.
+ *
+ * A featured image has no per-post focal point: this edits the image's own
+ * (the same meta as the media library, image editor and block toolbar), so
+ * it's saved straight away (debounced) rather than with the post, and it
+ * stays in sync when the point is changed in any of those other places.
  */
 function withFocalPointPicker(OriginalComponent) {
   return (props) => {
-    const { featuredImageId } = props;
+    const { featuredImageId: id } = props;
 
-    const imageMeta = useSelect(
-      (sel) => (featuredImageId ? sel("core").getMedia(featuredImageId) : null),
-      [featuredImageId],
-    );
-
-    const savedFocus = isFocus(imageMeta?.meta?.[META_KEY])
-      ? imageMeta.meta[META_KEY]
-      : DEFAULT_FOCUS;
-
-    const savedFaces = Array.isArray(imageMeta?.meta?.[META_FACES_KEY])
-      ? imageMeta.meta[META_FACES_KEY]
-      : [];
-
-    const [focalPoint, setFocalPoint] = useState(savedFocus);
+    const [media, setMedia] = useState(null);
+    const [focalPoint, setFocalPoint] = useState(CENTRE);
+    const [faces, setFaces] = useState([]);
     const [isModalOpen, setModalOpen] = useState(false);
-    const [faces, setFaces] = useState(savedFaces);
-    const latest = useRef({
-      focalPoint: savedFocus,
-      savedFocus,
-      faces: savedFaces,
-      savedFaces,
-      id: featuredImageId,
-    });
+    const [status, setStatus] = useState("");
+    const timer = useRef(null);
+    const queued = useRef(null);
 
-    // Reset the picker when the image (or its stored point/faces) changes.
+    // Load the image, then follow saves made anywhere else.
     useEffect(() => {
-      setFocalPoint(savedFocus);
-      setFaces(savedFaces);
-      latest.current.savedFocus = savedFocus;
-      latest.current.savedFaces = savedFaces;
-      latest.current.id = featuredImageId;
-    }, [featuredImageId, savedFocus.x, savedFocus.y, JSON.stringify(savedFaces)]);
+      setMedia(null);
 
-    useEffect(() => {
-      latest.current.focalPoint = focalPoint;
-    }, [focalPoint]);
+      if (!id) {
+        return;
+      }
 
-    useEffect(() => {
-      latest.current.faces = faces;
-    }, [faces]);
+      let live = true;
 
-    // Persist the point and faces once per successful (non-auto) post save.
-    useEffect(() => {
-      let wasSaving = false;
+      const apply = (record) => {
+        const focal = readFocal(record);
+        setMedia(record);
+        setFocalPoint(focal.point || CENTRE);
+        setFaces(focal.faces);
+      };
 
-      const unsubscribe = subscribe(() => {
-        const editor = select("core/editor");
-        const isSaving = editor.isSavingPost() && !editor.isAutosavingPost();
+      fetchMedia(id)
+        .then((record) => live && apply(record))
+        .catch(() => {});
 
-        if (isSaving) {
-          wasSaving = true;
-          return;
+      const unsubscribe = onFocalSaved((detail) => {
+        // Ignore the echo of our own pending save.
+        if (live && detail.media && !queued.current) {
+          apply(detail.media);
         }
+      }, id);
 
-        if (!wasSaving) {
-          return;
-        }
-        wasSaving = false;
+      return () => {
+        live = false;
+        unsubscribe();
+      };
+    }, [id]);
 
-        if (!editor.didPostSaveRequestSucceed()) {
-          return;
-        }
+    const flush = () => {
+      clearTimeout(timer.current);
+      timer.current = null;
 
-        const { focalPoint: current, savedFocus: saved, faces: currentFaces, savedFaces: savedFacesNow, id } = latest.current;
+      const change = queued.current;
+      queued.current = null;
 
-        const focusChanged = !(current.x === saved.x && current.y === saved.y);
-        const facesChanged = !facesEqual(currentFaces, savedFacesNow);
+      if (!change || !id) {
+        return;
+      }
 
-        if (!id || (!focusChanged && !facesChanged)) {
-          return;
-        }
+      saveFocal(id, { ...change, source: "manual" })
+        .then(() =>
+          setStatus(__("Saved to the image.", "focal-point-images-smart-crop")),
+        )
+        .catch(() =>
+          setStatus(__("Could not save the focal point.", "focal-point-images-smart-crop")),
+        );
+    };
 
-        const meta = {};
-        if (focusChanged) {
-          latest.current.savedFocus = current;
-          meta[META_KEY] = current;
-        }
-        if (facesChanged) {
-          latest.current.savedFaces = currentFaces;
-          meta[META_FACES_KEY] = currentFaces;
-        }
+    // Save anything pending when the image changes or the panel goes away.
+    useEffect(() => () => flush(), [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-        // Saving through the entity store keeps getMedia() in sync.
-        dispatch("core").saveEntityRecord("postType", "attachment", { id, meta });
-      });
+    const save = (change) => {
+      queued.current = { ...(queued.current || {}), ...change };
+      setStatus("");
+      clearTimeout(timer.current);
+      timer.current = setTimeout(flush, SAVE_DELAY);
+    };
 
-      return unsubscribe;
-    }, []);
-
-    if (!imageMeta) {
+    if (!id || !media) {
       return <OriginalComponent {...props} />;
     }
+
+    const { width, height } = imageDimensions(media);
 
     return (
       <div className="remove_standard_image">
         <FocalPicker
           label=""
-          url={imageMeta.source_url}
-          dimensions={{ width: imageMeta.width, height: imageMeta.height }}
+          url={media.source_url}
+          dimensions={{ width, height }}
           value={focalPoint}
-          onChange={setFocalPoint}
+          onChange={(point) => {
+            setFocalPoint(point);
+            save({ point });
+          }}
           faces={faces}
-          onFacesChange={setFaces}
+          onFacesChange={(next) => {
+            setFaces(next);
+            save({ faces: next });
+          }}
         />
-        <Button
-          variant="secondary"
-          size="small"
-          onClick={() => setModalOpen(true)}
-          style={{ marginTop: 8 }}
-        >
+        <p className="description noon-focal-featured-image__status" aria-live="polite">
+          {status ||
+            __(
+              "The image’s own focal point, used wherever it appears.",
+              "focal-point-images-smart-crop",
+            )}
+        </p>
+        <Button variant="secondary" size="small" onClick={() => setModalOpen(true)}>
           {__("Edit focal point", "focal-point-images-smart-crop")}
         </Button>
         {isModalOpen && (
           <FocalPointModal
-            src={imageMeta.source_url}
-            width={imageMeta.media_details?.width}
-            height={imageMeta.media_details?.height}
+            src={media.source_url}
+            width={width}
+            height={height}
             value={focalPoint}
             faces={faces}
             onApply={(point, found) => {
               setFocalPoint(point);
               setFaces(found);
               setModalOpen(false);
+              save({ point, faces: found });
+              flush();
             }}
             onClose={() => setModalOpen(false)}
           />

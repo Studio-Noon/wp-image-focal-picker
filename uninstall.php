@@ -13,6 +13,8 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 require __DIR__ . '/includes/config.php';
 
 delete_post_meta_by_key( 'noon_focal_point' );
+delete_post_meta_by_key( 'noon_focal_point_faces' );
+delete_post_meta_by_key( 'noon_focal_point_source' );
 delete_option( 'noon_focal_warm_progress' );
 wp_clear_scheduled_hook( 'noon_focal_warm_batch' );
 wp_unschedule_hook( 'noon_focal_warm_attachment' );

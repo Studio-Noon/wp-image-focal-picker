@@ -32,6 +32,8 @@ export default function FocalPointModal({
       onRequestClose={onClose}
       isFullScreen
       className="noon-focal-modal"
+      // Above the media modal (z-index 160000) it can open from.
+      overlayClassName="noon-focal-modal-overlay"
     >
       <div className="noon-focal-modal__layout">
         <div className="noon-focal-editor">
