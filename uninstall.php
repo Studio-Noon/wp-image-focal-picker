@@ -25,8 +25,10 @@ require_once ABSPATH . 'wp-admin/includes/file.php';
 WP_Filesystem();
 global $wp_filesystem;
 
-if ( $wp_filesystem->exists( noon_focal_secret_file() ) ) {
-	$wp_filesystem->delete( noon_focal_secret_file() );
+foreach ( array( noon_focal_secret_file(), noon_focal_legacy_secret_file() ) as $noon_focal_file ) {
+	if ( $wp_filesystem->exists( $noon_focal_file ) ) {
+		$wp_filesystem->delete( $noon_focal_file );
+	}
 }
 
 if ( is_dir( NOON_FOCAL_CACHE_DIR ) ) {

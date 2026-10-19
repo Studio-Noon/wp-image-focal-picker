@@ -5,8 +5,8 @@
  * option is the source of truth; it's mirrored to a file in the uploads
  * directory (WP_Filesystem, protected by insert_with_markers()) because
  * media.php reads it without booting WordPress, so it has no wpdb. Undefined
- * is not an error: noon_focal_glide_url() and media.php both fall back to
- * building and accepting unsigned requests. This file must stay free of
+ * is not an error: noon_focal_glide_url() builds unsigned URLs and media.php
+ * answers them with the original file, never a rendition. This file must stay free of
  * WordPress dependencies itself: media.php loads it without booting WordPress.
  *
  * @package Noon_Focal_Retina_Image_Generator
@@ -141,8 +141,48 @@ if ( ! function_exists( 'noon_focal_allowed_glide_params' ) ) {
 
 if ( ! function_exists( 'noon_focal_secret_file' ) ) {
 
+	/**
+	 * The secret mirror. A .php file opening with an exit, so a web server that
+	 * ignores the uploads/.htaccess deny (nginx) runs it and sends nothing back,
+	 * rather than serving the secret as a static file. It is only ever read as
+	 * text (noon_focal_read_secret_file()), never included.
+	 */
 	function noon_focal_secret_file() {
+		return NOON_FOCAL_UPLOADS_DIR . '/.noon-focal-secret.php';
+	}
+
+	/**
+	 * Plain-text mirror written before 1.3.3. Still read until
+	 * noon_focal_ensure_secret() replaces it, then deleted.
+	 */
+	function noon_focal_legacy_secret_file() {
 		return NOON_FOCAL_UPLOADS_DIR . '/.noon-focal-secret';
+	}
+
+	function noon_focal_secret_file_header() {
+		return '<?php exit; ?>';
+	}
+
+	/**
+	 * Secret stored in a mirror file, or '' when it is missing or empty.
+	 *
+	 * @param string $file noon_focal_secret_file() or the legacy file.
+	 */
+	function noon_focal_read_secret_file( $file ) {
+
+		if ( ! is_file( $file ) ) {
+			return '';
+		}
+
+		$contents = (string) @file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_get_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- must work without WordPress; noon_focal_ensure_secret() is the WP_Filesystem write path.
+		$header   = noon_focal_secret_file_header();
+
+		if ( 0 === strpos( $contents, $header ) ) {
+			$contents = substr( $contents, strlen( $header ) );
+		}
+
+		return trim( $contents );
+
 	}
 
 	/**
@@ -178,14 +218,19 @@ if ( ! function_exists( 'noon_focal_secret_file' ) ) {
 
 		global $wp_filesystem;
 
-		$wp_filesystem->put_contents( noon_focal_secret_file(), $secret, FS_CHMOD_FILE );
+		$wp_filesystem->put_contents( noon_focal_secret_file(), noon_focal_secret_file_header() . "\n" . $secret . "\n", FS_CHMOD_FILE );
+
+		if ( $wp_filesystem->exists( noon_focal_legacy_secret_file() ) && noon_focal_read_secret_file( noon_focal_secret_file() ) === $secret ) {
+			$wp_filesystem->delete( noon_focal_legacy_secret_file() );
+		}
 
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 
+		// Covers the current and the legacy mirror.
 		insert_with_markers(
 			NOON_FOCAL_UPLOADS_DIR . '/.htaccess',
 			'Focal Retina Image Generator',
-			array( '<Files ".noon-focal-secret">', 'Require all denied', '</Files>' )
+			array( '<FilesMatch "^\.noon-focal-secret">', 'Require all denied', '</FilesMatch>' )
 		);
 
 		return true;
@@ -194,8 +239,11 @@ if ( ! function_exists( 'noon_focal_secret_file' ) ) {
 
 }
 
-if ( ! defined( 'NOON_IMAGE_SECRET' ) && file_exists( noon_focal_secret_file() ) ) {
-	$noon_focal_secret = trim( (string) @file_get_contents( noon_focal_secret_file() ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_get_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- must work without WordPress; noon_focal_ensure_secret() is the WP_Filesystem write path.
+if ( ! defined( 'NOON_IMAGE_SECRET' ) ) {
+	$noon_focal_secret = noon_focal_read_secret_file( noon_focal_secret_file() );
+	if ( '' === $noon_focal_secret ) {
+		$noon_focal_secret = noon_focal_read_secret_file( noon_focal_legacy_secret_file() );
+	}
 	if ( '' !== $noon_focal_secret ) {
 		define( 'NOON_IMAGE_SECRET', $noon_focal_secret );
 	}

@@ -178,17 +178,17 @@ class Noon_Focal_Retina_Image_Generator_Status {
 				'label' => __( 'Signing secret', 'noon-focus-crop' ),
 				'state' => 'warn',
 				/* translators: %s: secret mirror file path */
-				'text'  => sprintf( __( 'None yet — images are served unsigned. %s could not be written; reload this page to retry.', 'noon-focus-crop' ), $file ),
+				'text'  => sprintf( __( 'None yet — media.php serves original files instead of renditions. %s could not be written; reload this page to retry.', 'noon-focus-crop' ), $file ),
 			);
 		}
 
 		return array(
 			'label' => __( 'Signing secret', 'noon-focus-crop' ),
-			'state' => file_exists( $file ) ? 'ok' : 'warn',
+			'state' => file_exists( $file ) ? 'ok' : 'error',
 			'text'  => file_exists( $file )
 				/* translators: %s: secret mirror file path */
 				? sprintf( __( 'Loaded from %s', 'noon-focus-crop' ), $file )
-				: __( 'Set, but not yet mirrored for media.php to read — reload this page to write it.', 'noon-focus-crop' ),
+				: __( 'Set, but not yet mirrored for media.php to read, so it serves original files instead of renditions — reload this page to write it.', 'noon-focus-crop' ),
 		);
 
 	}
@@ -413,7 +413,7 @@ class Noon_Focal_Retina_Image_Generator_Status {
 					'label'  => $label,
 					'state'  => 'error',
 					'text'   => false !== strpos( (string) $to, 'direct=true' )
-						? __( 'media.php is reached but rejected the signature. The secret WordPress signs with differs from the one media.php reads — reload this page to re-mirror it.', 'noon-focus-crop' )
+						? __( 'media.php is reached but rejected the signature. It cannot read the secret, or the one WordPress signs with differs from it — reload this page to re-mirror it.', 'noon-focus-crop' )
 						/* translators: 1: HTTP status, 2: redirect target */
 						: sprintf( __( 'Redirected (%1$d) to %2$s — another rule is intercepting the request.', 'noon-focus-crop' ), $code, $to ),
 					'detail' => $detail,

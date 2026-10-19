@@ -133,6 +133,12 @@ WordPress goes back to its generated files. Sizes that were never written to dis
 
 == Changelog ==
 
+= 1.3.3 =
+* Security: the signing secret mirror is now `uploads/.noon-focal-secret.php`, opening with an exit so it is never served as text where `.htaccess` is ignored (nginx). The old plain-text file is read until replaced, then deleted.
+* Security: `media.php` fails closed — when it cannot read the secret it serves the original file instead of rendering unsigned requests.
+* Security: `media.php` refuses direct requests (`…/media.php/uploads/…`), which could bypass the web server's rules for private uploads directories.
+* Security: fixed an open redirect when an invalid request was answered with the original file from a path starting with `//`.
+
 = 1.3.2 =
 * The image endpoint (`media.php`) now validates every request against an explicit allowlist of the Glide parameters it actually uses, dropping anything else before it reaches Glide — hardens unsigned-fallback deployments (no signing secret configured) against arbitrary manipulation requests.
 * Added the standard direct-access guard to the cache warmer class, and clarified the intentional guards in `media.php` and `includes/config.php`, which must stay reachable without WordPress loaded.

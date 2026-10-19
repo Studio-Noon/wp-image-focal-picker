@@ -6,10 +6,9 @@
  *
  * Intentionally does not boot WordPress: every image request passes through
  * this file, cached or not, and loading WordPress for each one would defeat
- * the purpose. When a secret is configured (includes/config.php), nothing is
- * served without a signature that validates against it; without one, this
- * endpoint is an unauthenticated resize proxy, constrained to raster files
- * already inside the uploads directory and Glide's own max_image_size cap.
+ * the purpose. Nothing is rendered without a signature that validates against
+ * the secret (includes/config.php); an unsigned or invalid request, or any
+ * request while the secret cannot be read, gets the original file instead.
  *
  * @package Noon_Focal_Retina_Image_Generator
  */
@@ -56,7 +55,9 @@ function noon_focal_serve_original( $path, $file_path ) {
 		exit;
 	}
 
-	header( 'Location: ' . $path . '?direct=true', true, 302 );
+	// A path starting "//" or "/\" would be read by browsers as another host
+	// (e.g. //2130706433/… is 127.0.0.1), making this an open redirect.
+	header( 'Location: /' . ltrim( $path, '/\\' ) . '?direct=true', true, 302 );
 	exit;
 
 }
@@ -76,7 +77,13 @@ function noon_focal_serve_request() {
 	$path   = rawurldecode( $path );
 	$prefix = strpos( $path, '/uploads/' );
 
-	if ( '' === $path || false === $prefix || false !== strpos( $path, '..' ) || false !== strpos( $path, "\0" ) ) {
+	// Only reachable through the upload rewrite. Requested directly as
+	// …/media.php/uploads/… (PATH_INFO), it would answer for files the web
+	// server's own rules keep private (e.g. a denied uploads subdirectory).
+	$direct = '' !== (string) ( $_SERVER['PATH_INFO'] ?? $_SERVER['ORIG_PATH_INFO'] ?? '' )
+		|| false !== strpos( $path, '/' . basename( __FILE__ ) . '/' );
+
+	if ( $direct || '' === $path || false === $prefix || false !== strpos( $path, '..' ) || false !== strpos( $path, "\0" ) ) {
 		http_response_code( 404 );
 		exit;
 	}
@@ -97,16 +104,18 @@ function noon_focal_serve_request() {
 		noon_focal_serve_original( $path, $file_path );
 	}
 
-	if ( defined( 'NOON_IMAGE_SECRET' ) ) {
-
-		try {
-			SignatureFactory::create( NOON_IMAGE_SECRET )->validateRequest( $path, $params );
-		} catch ( SignatureException $e ) {
-			// Serve the original image if the signature is invalid.
-			noon_focal_serve_original( $path, $file_path );
-		}
+	// No readable secret (see includes/config.php): fail closed rather than
+	// render arbitrary unsigned requests.
+	if ( ! defined( 'NOON_IMAGE_SECRET' ) ) {
+		noon_focal_serve_original( $path, $file_path );
 	}
-	// No secret configured: served unsigned (see includes/config.php).
+
+	try {
+		SignatureFactory::create( NOON_IMAGE_SECRET )->validateRequest( $path, $params );
+	} catch ( SignatureException $e ) {
+		// Serve the original image if the signature is invalid.
+		noon_focal_serve_original( $path, $file_path );
+	}
 
 	try {
 
