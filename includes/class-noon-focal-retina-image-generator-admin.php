@@ -628,11 +628,56 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	}
 
 	/**
+	 * Whether to leave WordPress' own files alone on the current request: the
+	 * Media Library (upload.php, grid and list, plus the grid's AJAX paging).
+	 * Its tiles would otherwise each render a Glide rendition from the full
+	 * original upload, dozens at once. Core then uses the sizes already on disk
+	 * (medium, else thumbnail). Media modals elsewhere are unaffected, so
+	 * inserted images keep their Glide URLs.
+	 */
+	public static function bypass_glide() {
+
+		static $bypass = null;
+
+		if ( null !== $bypass ) {
+			return $bypass;
+		}
+
+		$bypass = false;
+
+		if ( is_admin() ) {
+			if ( wp_doing_ajax() ) {
+				$action  = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification -- read-only routing check.
+				$referer = (string) wp_parse_url( (string) wp_get_referer(), PHP_URL_PATH );
+				$bypass  = in_array( $action, array( 'query-attachments', 'get-attachment' ), true )
+					&& '/upload.php' === substr( $referer, -strlen( '/upload.php' ) );
+			} else {
+				$bypass = 'upload.php' === ( $GLOBALS['pagenow'] ?? '' );
+			}
+		}
+
+		/**
+		 * Whether to serve WordPress' own image files instead of Glide renditions
+		 * on this request. Defaults to true on the Media Library only.
+		 *
+		 * @param bool $bypass
+		 */
+		$bypass = (bool) apply_filters( 'noon_focal_bypass_glide', $bypass );
+
+		return $bypass;
+
+	}
+
+	/**
 	 * Make wp_get_attachment_image(), the_post_thumbnail() and blocks return
 	 * signed Glide URLs instead of generated files. 'full' is left alone, and so
 	 * is 'thumbnail' when its file exists.
 	 */
 	public function image_downsize( $out, $attachment_id, $size ) {
+
+		if ( self::bypass_glide() ) {
+			return $out;
+		}
 
 		if ( 'full' === $size || ! wp_attachment_is_image( $attachment_id ) ) {
 			return $out;
@@ -793,6 +838,10 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 */
 	public function wp_calculate_image_srcset_meta( $image_meta, $size_array, $image_src, $attachment_id ) {
 
+		if ( self::bypass_glide() ) {
+			return $image_meta;
+		}
+
 		$source = noon_focal_source_file( $attachment_id );
 
 		if ( $source && ! empty( $image_meta['file'] ) && $source !== $image_meta['file'] && false !== strpos( $image_src, wp_basename( $source ) ) ) {
@@ -829,7 +878,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 */
 	public function wp_calculate_image_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
 
-		if ( ! is_array( $sources ) || ! wp_attachment_is_image( $attachment_id ) ) {
+		if ( self::bypass_glide() || ! is_array( $sources ) || ! wp_attachment_is_image( $attachment_id ) ) {
 			return $sources;
 		}
 
@@ -845,14 +894,17 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 		}
 
 		$fit     = self::get_fit( $attachment_id );
-		$max     = noon_focal_source_size( $attachment_id )[0];
+		$source  = noon_focal_source_size( $attachment_id );
+		$max     = noon_focal_max_width( $source, array( 'w' => $w, 'h' => $h ) );
 		$sources = array();
+		$capped  = false;
 
 		foreach ( self::dprs() as $dpr ) {
 
 			$width = (int) round( $w * $dpr );
 
 			if ( $max > 0 && $width > $max ) {
+				$capped = true;
 				continue;
 			}
 
@@ -867,6 +919,19 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 				'value'      => $width,
 			);
 
+		}
+
+		// Steps were dropped for being wider than the source: top out at the source instead.
+		if ( $capped && ! isset( $sources[ $max ] ) ) {
+			$sources[ $max ] = array(
+				'url'        => noon_focal_glide_url( $attachment_id, array(
+					'w'   => $max,
+					'h'   => max( 1, min( $source[1], (int) round( $max * $h / $w ) ) ),
+					'fit' => $fit,
+				) ),
+				'descriptor' => 'w',
+				'value'      => $max,
+			);
 		}
 
 		return $sources;
@@ -885,7 +950,7 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 */
 	public function responsive_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
 
-		if ( ! is_array( $sources ) || ! noon_focal_responsive_sizes() ) {
+		if ( self::bypass_glide() || ! is_array( $sources ) || ! noon_focal_responsive_sizes() ) {
 			return $sources;
 		}
 
@@ -924,6 +989,10 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 */
 	public function responsive_sizes_attr( $sizes, $size, $image_src, $image_meta, $attachment_id ) {
 
+		if ( self::bypass_glide() ) {
+			return $sizes;
+		}
+
 		if ( is_array( $size ) ) {
 			$size = $this->responsive_size_for_box( $attachment_id, $size );
 		}
@@ -940,6 +1009,10 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 * and dpr srcset and serves viewports below the smallest breakpoint.
 	 */
 	public function picture_wrap( $html, $attachment_id, $size, $icon = false, $attr = array() ) {
+
+		if ( self::bypass_glide() ) {
+			return $html;
+		}
 
 		$config = noon_focal_responsive_size( $size );
 

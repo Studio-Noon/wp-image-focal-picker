@@ -341,6 +341,20 @@ function noon_focal_responsive_base( $name ) {
 }
 
 /**
+ * Widest box at $box's aspect ratio that a source of [w, h] fills without
+ * upscaling either side. 0 when the source size is unknown (nothing capped).
+ */
+function noon_focal_max_width( $source, $box ) {
+
+	if ( $source[0] < 1 || $source[1] < 1 || $box['w'] < 1 || $box['h'] < 1 ) {
+		return 0;
+	}
+
+	return (int) min( $source[0], floor( $source[1] * $box['w'] / $box['h'] ) );
+
+}
+
+/**
  * srcset boxes for a responsive size without breakpoints: its widths (or the
  * automatic ladder) times every dpr, at the size's aspect ratio, capped at the
  * original. Each is ['w' => , 'h' => ]. Empty for breakpoint sizes.
@@ -374,16 +388,23 @@ function noon_focal_responsive_candidates( $attachment_id, $name ) {
 
 	$widths[] = $box['w'];
 
-	$max = noon_focal_source_size( $attachment_id )[0];
+	$source = noon_focal_source_size( $attachment_id );
+	$max    = noon_focal_max_width( $source, $box );
 
 	$candidates = array();
+	$capped     = false;
 
 	foreach ( $widths as $w ) {
 		foreach ( Noon_Focal_Retina_Image_Generator_Admin::dprs() as $dpr ) {
 
 			$cw = (int) round( $w * $dpr );
 
-			if ( $cw < 1 || ( $max > 0 && $cw > $max ) ) {
+			if ( $cw < 1 ) {
+				continue;
+			}
+
+			if ( $max > 0 && $cw > $max ) {
+				$capped = true;
 				continue;
 			}
 
@@ -393,6 +414,14 @@ function noon_focal_responsive_candidates( $attachment_id, $name ) {
 			);
 
 		}
+	}
+
+	// Steps were dropped for being wider than the source: top out at the source instead.
+	if ( $capped ) {
+		$candidates[ $max ] = array(
+			'w' => $max,
+			'h' => max( 1, min( $source[1], (int) round( $max * $box['h'] / $box['w'] ) ) ),
+		);
 	}
 
 	ksort( $candidates, SORT_NUMERIC );

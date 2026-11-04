@@ -60,7 +60,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 	public function variants( $attachment_id ) {
 
 		$file = noon_focal_source_path( $attachment_id );
-		$max  = noon_focal_source_size( $attachment_id )[0];
+		$source = noon_focal_source_size( $attachment_id );
 
 		if ( ! $file ) {
 			return array();
@@ -110,9 +110,13 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 				continue;
 			}
 
+			$max    = isset( $params['h'] ) ? noon_focal_max_width( $source, $params ) : $source[0];
+			$capped = false;
+
 			foreach ( Noon_Focal_Retina_Image_Generator_Admin::dprs() as $dpr ) {
 
 				if ( $max > 0 && round( $params['w'] * $dpr ) > $max ) {
+					$capped = true;
 					continue;
 				}
 
@@ -125,6 +129,17 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 					$variants[] = array_merge( $format, $with_dpr );
 				}
 
+			}
+
+			// Matches the srcset's top step when dpr steps outgrow the source.
+			if ( $capped && isset( $params['h'] ) ) {
+				$top = array_merge( $params, array(
+					'w' => $max,
+					'h' => max( 1, min( $source[1], (int) round( $max * $params['h'] / $params['w'] ) ) ),
+				) );
+				foreach ( $formats as $format ) {
+					$variants[] = array_merge( $format, $top );
+				}
 			}
 
 		}

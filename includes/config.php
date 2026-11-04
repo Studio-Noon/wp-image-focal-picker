@@ -210,6 +210,19 @@ if ( ! function_exists( 'noon_focal_secret_file' ) ) {
 			define( 'NOON_IMAGE_SECRET', $secret );
 		}
 
+		// Runs on every admin request (admin-ajax included): when the mirror and
+		// its .htaccess deny are already in place, skip WP_Filesystem and writes.
+		$htaccess = NOON_FOCAL_UPLOADS_DIR . '/.htaccess';
+
+		if (
+			noon_focal_read_secret_file( noon_focal_secret_file() ) === $secret
+			&& ! is_file( noon_focal_legacy_secret_file() )
+			&& is_file( $htaccess )
+			&& false !== strpos( (string) @file_get_contents( $htaccess ), '^\.noon-focal-secret' ) // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.PHP.NoSilencedErrors.Discouraged -- read-only check.
+		) {
+			return true;
+		}
+
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 
 		if ( ! WP_Filesystem() ) {
