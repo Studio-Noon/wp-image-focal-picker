@@ -66,6 +66,7 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 			return array();
 		}
 
+		$meta  = wp_get_attachment_metadata( $attachment_id );
 		$sizes = array_keys( wp_get_registered_image_subsizes() );
 
 		if ( ! empty( $meta['sizes']['thumbnail'] ) ) {
@@ -340,6 +341,11 @@ class Noon_Focal_Retina_Image_Generator_Warmer {
 				: esc_html__( 'Warm cache for all images', 'noon-focus-crop' ),
 			esc_html__( 'Pre-builds every registered size (1x, 1.5x, 2x, native and WebP) for every image in the background via WP-Cron. Already-cached renditions are skipped.', 'noon-focus-crop' )
 		);
+
+		/**
+		 * Fires at the end of the "Image cache" section on Settings → Media.
+		 */
+		do_action( 'noon_focal_cache_section' );
 
 	}
 

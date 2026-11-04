@@ -132,7 +132,16 @@ function noon_focal_serve_request() {
 		// The response depends on the Accept header, so caches must key on it.
 		header( 'Vary: Accept' );
 
-		$server->outputImage( $file_path, array_merge( $defaults, $params ) );
+		$params = array_merge( $defaults, $params );
+
+		$server->outputImage( $file_path, $params );
+
+		// Mark the rendition as used so the daily prune keeps it. At most once
+		// a day per file, and after output so this response is unaffected.
+		$cached = NOON_FOCAL_CACHE_DIR . '/' . $server->getCachePath( $file_path, $params );
+		if ( is_file( $cached ) && filemtime( $cached ) < time() - 86400 ) {
+			@touch( $cached ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- no WordPress here; a read-only cache just skips the touch.
+		}
 
 	} catch ( FileNotFoundException $e ) {
 

@@ -18,6 +18,9 @@ delete_post_meta_by_key( 'noon_focal_point_source' );
 delete_option( 'noon_focal_warm_progress' );
 wp_clear_scheduled_hook( 'noon_focal_warm_batch' );
 wp_unschedule_hook( 'noon_focal_warm_attachment' );
+wp_clear_scheduled_hook( 'noon_focal_prune_cache' );
+wp_clear_scheduled_hook( 'noon_focal_prune_cache_continue' );
+delete_site_option( 'noon_focal_prune_cursor' );
 
 delete_site_option( 'noon_focal_signing_secret' );
 

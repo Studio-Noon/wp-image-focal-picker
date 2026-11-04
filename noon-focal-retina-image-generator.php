@@ -37,6 +37,7 @@ require __DIR__ . '/includes/config.php';
 require __DIR__ . '/includes/functions.php';
 require __DIR__ . '/includes/class-noon-focal-retina-image-generator-admin.php';
 require __DIR__ . '/includes/class-noon-focal-retina-image-generator-warmer.php';
+require __DIR__ . '/includes/class-noon-focal-retina-image-generator-cache.php';
 require __DIR__ . '/includes/class-noon-focal-retina-image-generator-status.php';
 
 register_activation_hook( __FILE__, function () {
@@ -47,6 +48,8 @@ register_activation_hook( __FILE__, function () {
 
 register_deactivation_hook( __FILE__, function () {
 	flush_rewrite_rules();
+	wp_clear_scheduled_hook( Noon_Focal_Retina_Image_Generator_Cache::CRON_PRUNE );
+	wp_clear_scheduled_hook( Noon_Focal_Retina_Image_Generator_Cache::CRON_CONTINUE );
 	Noon_Focal_Retina_Image_Generator_Admin::sync_multisite_htaccess( false );
 } );
 
@@ -87,6 +90,9 @@ add_action( 'delete_attachment', array( $noon_focal, 'delete_attachment' ) );
 
 // Pre-build renditions in the background (uploads, focal changes, bulk action, Settings → Media, WP-CLI).
 ( new Noon_Focal_Retina_Image_Generator_Warmer() )->register();
+
+// Purge buttons, daily expiry of renditions unused for 30 days, WP-CLI.
+( new Noon_Focal_Retina_Image_Generator_Cache() )->register();
 
 // "Is it working?" checks on Settings → Media.
 ( new Noon_Focal_Retina_Image_Generator_Status() )->register();
