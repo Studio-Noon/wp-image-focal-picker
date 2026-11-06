@@ -21,6 +21,7 @@ wp_unschedule_hook( 'noon_focal_warm_attachment' );
 wp_clear_scheduled_hook( 'noon_focal_prune_cache' );
 wp_clear_scheduled_hook( 'noon_focal_prune_cache_continue' );
 delete_site_option( 'noon_focal_prune_cursor' );
+delete_site_option( 'noon_focal_prune_last' );
 
 delete_site_option( 'noon_focal_signing_secret' );
 

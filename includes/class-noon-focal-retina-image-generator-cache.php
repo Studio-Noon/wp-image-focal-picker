@@ -4,7 +4,8 @@
  *
  * - "Purge" buttons on Settings → Media: this site's renditions, or (super
  *   admins on multisite) every site's.
- * - A daily WP-Cron job deletes renditions nobody has requested for 30 days.
+ * - A daily WP-Cron job deletes renditions nobody has requested for 14 days
+ *   (2 with a CDN in front, which keeps its own copies).
  *   media.php touches a rendition when it serves it, so the file's mtime is
  *   its last use (atime is unreliable on noatime mounts).
  * - `wp noon-focal purge` does the same from WP-CLI.
@@ -24,6 +25,7 @@ class Noon_Focal_Retina_Image_Generator_Cache {
 	const CRON_PRUNE     = 'noon_focal_prune_cache';
 	const CRON_CONTINUE  = 'noon_focal_prune_cache_continue';
 	const OPTION_CURSOR  = 'noon_focal_prune_cursor';
+	const OPTION_LAST    = 'noon_focal_prune_last';
 	const ACTION_SITE    = 'noon_focal_purge';
 	const ACTION_NETWORK = 'noon_focal_purge_network';
 	const BATCH_SECONDS  = 20;
@@ -34,6 +36,7 @@ class Noon_Focal_Retina_Image_Generator_Cache {
 		add_action( self::CRON_CONTINUE, array( $this, 'cron_prune' ) );
 		add_action( 'admin_init', array( $this, 'schedule' ) );
 
+		add_action( 'admin_init', array( $this, 'settings_section' ) );
 		add_action( 'noon_focal_cache_section', array( $this, 'render_buttons' ) );
 		add_action( 'admin_post_' . self::ACTION_SITE, array( $this, 'handle_purge' ) );
 		add_action( 'admin_post_' . self::ACTION_NETWORK, array( $this, 'handle_purge' ) );
@@ -50,7 +53,26 @@ class Noon_Focal_Retina_Image_Generator_Cache {
 	 * 0 disables pruning.
 	 */
 	public static function max_age() {
-		return (int) apply_filters( 'noon_focal_cache_max_age', 30 * DAY_IN_SECONDS );
+		// With a CDN in front this cache only bridges CDN misses.
+		$default = '' !== noon_focal_cdn_url() ? 2 * DAY_IN_SECONDS : 14 * DAY_IN_SECONDS;
+		return (int) apply_filters( 'noon_focal_cache_max_age', $default );
+	}
+
+	/**
+	 * When the last full prune pass finished, and how many files it deleted.
+	 *
+	 * time is 0 until a pass has finished; running is true while a pass is split
+	 * across cron events.
+	 *
+	 * @return array{time: int, deleted: int, running: bool}|null
+	 */
+	public static function last_prune() {
+		$last = get_site_option( self::OPTION_LAST );
+		return is_array( $last ) ? array(
+			'time'    => (int) ( $last['time'] ?? 0 ),
+			'deleted' => (int) ( $last['deleted'] ?? 0 ),
+			'running' => ! empty( $last['running'] ),
+		) : null;
 	}
 
 	/**
@@ -201,6 +223,10 @@ class Noon_Focal_Retina_Image_Generator_Cache {
 		$cutoff  = time() - $max_age;
 		$cursor  = (string) get_site_option( self::OPTION_CURSOR, '' );
 		$deleted = 0;
+		$last    = self::last_prune();
+
+		// A pass split across cron events adds up its deletions.
+		$carried = ( '' !== $cursor && $last && ! empty( $last['running'] ) ) ? $last['deleted'] : 0;
 
 		foreach ( $this->prune_units() as $unit ) {
 
@@ -212,6 +238,7 @@ class Noon_Focal_Retina_Image_Generator_Cache {
 			update_site_option( self::OPTION_CURSOR, $unit );
 
 			if ( $budget && microtime( true ) - $started > $budget ) {
+				update_site_option( self::OPTION_LAST, array( 'time' => (int) ( $last['time'] ?? 0 ), 'deleted' => $carried + $deleted, 'running' => true ) );
 				wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::CRON_CONTINUE );
 				return $deleted;
 			}
@@ -219,6 +246,7 @@ class Noon_Focal_Retina_Image_Generator_Cache {
 		}
 
 		delete_site_option( self::OPTION_CURSOR );
+		update_site_option( self::OPTION_LAST, array( 'time' => time(), 'deleted' => $carried + $deleted ) );
 
 		return $deleted;
 
@@ -296,8 +324,52 @@ class Noon_Focal_Retina_Image_Generator_Cache {
 	 * Admin UI
 	 * ------------------------------------------------------------------ */
 
+	public function settings_section() {
+
+		add_settings_section(
+			'noon_focal_cache',
+			__( 'Image cache', 'noon-focus-crop' ),
+			array( $this, 'render_section' ),
+			'media'
+		);
+
+	}
+
+	public function render_section() {
+
+		$sizes = Noon_Focal_Retina_Image_Generator_Warmer::sizes();
+
+		if ( Noon_Focal_Retina_Image_Generator_Warmer::enabled() && $sizes ) {
+
+			$names = array_map( function ( $size ) {
+				$box = is_array( $size ) ? noon_focal_resolve_size( $size ) : null;
+				return $box ? $box['w'] . '×' . $box['h'] : (string) $size;
+			}, $sizes );
+
+			printf(
+				'<p>%s</p>',
+				/* translators: %s: comma-separated size names */
+				esc_html( sprintf( __( 'Pre-built in the background when an image is uploaded or its focal point changes: %s. Every other rendition is created the first time it is requested.', 'noon-focus-crop' ), implode( ', ', $names ) ) )
+			);
+
+		} else {
+
+			printf(
+				'<p>%s</p>',
+				esc_html__( 'Renditions are created the first time they are requested, then served from the cache.', 'noon-focus-crop' )
+			);
+
+		}
+
+		/**
+		 * Fires at the end of the "Image cache" section on Settings → Media.
+		 */
+		do_action( 'noon_focal_cache_section' );
+
+	}
+
 	/**
-	 * Buttons under the warmer's "Image cache" section on Settings → Media.
+	 * Purge buttons in the "Image cache" section on Settings → Media.
 	 * Links rather than forms: the section renders inside the Media form.
 	 */
 	public function render_buttons() {

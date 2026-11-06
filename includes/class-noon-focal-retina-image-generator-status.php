@@ -11,7 +11,7 @@ class Noon_Focal_Retina_Image_Generator_Status {
 	const TEST_SIZE = 32;
 
 	public function register() {
-		// Priority 9 so this section renders above the warmer's "Image cache".
+		// Priority 9 so this section renders above the cache class's "Image cache".
 		add_action( 'admin_init', array( $this, 'settings_section' ), 9 );
 	}
 
@@ -39,6 +39,9 @@ class Noon_Focal_Retina_Image_Generator_Status {
 		$checks = array();
 
 		$checks[] = $this->check_live_request();
+		if ( '' !== noon_focal_cdn_url() ) {
+			$checks[] = $this->check_cdn();
+		}
 		$checks[] = $this->check_server( $server );
 		$checks[] = 'nginx' === $server ? $this->check_nginx() : $this->check_htaccess( $server );
 		$checks[] = $this->check_secret();
@@ -296,18 +299,33 @@ class Noon_Focal_Retina_Image_Generator_Status {
 
 	private function check_cron() {
 
+		$max_age = Noon_Focal_Retina_Image_Generator_Cache::max_age();
+		$last    = Noon_Focal_Retina_Image_Generator_Cache::last_prune();
+
+		if ( $max_age <= 0 ) {
+			$prune = __( 'Expiry of unused renditions is disabled.', 'noon-focus-crop' );
+		} elseif ( $last && $last['time'] > 0 ) {
+			/* translators: 1: human-readable time span, 2: number of files */
+			$prune = sprintf( __( 'Last expiry pass finished %1$s ago and deleted %2$s unused renditions.', 'noon-focus-crop' ), human_time_diff( $last['time'] ), number_format_i18n( $last['deleted'] ) );
+		} else {
+			$prune = __( 'The daily expiry pass has not finished yet.', 'noon-focus-crop' );
+		}
+
+		// Overdue: a daily job that has not completed in two days means cron is not running.
+		$stale = $max_age > 0 && $last && $last['time'] > 0 && $last['time'] < time() - 2 * DAY_IN_SECONDS;
+
 		if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
 			return array(
 				'label' => __( 'WP-Cron', 'noon-focus-crop' ),
 				'state' => 'warn',
-				'text'  => __( 'DISABLE_WP_CRON is set. Background warming only runs if a system cron calls wp-cron.php (or "wp cron event run --due-now").', 'noon-focus-crop' ),
+				'text'  => __( 'DISABLE_WP_CRON is set. Unused renditions only expire if a system cron calls wp-cron.php (or "wp cron event run --due-now").', 'noon-focus-crop' ) . ' ' . $prune,
 			);
 		}
 
 		return array(
 			'label' => __( 'WP-Cron', 'noon-focus-crop' ),
-			'state' => 'ok',
-			'text'  => __( 'Enabled; uploads and focal-point changes are warmed in the background.', 'noon-focus-crop' ),
+			'state' => $stale ? 'warn' : 'ok',
+			'text'  => ( $stale ? __( 'Enabled, but the expiry pass is overdue; check that WP-Cron runs.', 'noon-focus-crop' ) : __( 'Enabled.', 'noon-focus-crop' ) ) . ' ' . $prune,
 		);
 
 	}
@@ -355,7 +373,10 @@ class Noon_Focal_Retina_Image_Generator_Status {
 			return array( 'label' => $label, 'state' => 'info', 'text' => __( 'No JPEG/PNG uploads to test with yet.', 'noon-focus-crop' ) );
 		}
 
+		// Always test the origin; the CDN has its own check.
+		add_filter( 'noon_focal_cdn_url', '__return_empty_string', PHP_INT_MAX );
 		$url = noon_focal_glide_url( $id, array( 'w' => self::TEST_SIZE, 'h' => self::TEST_SIZE, 'fit' => 'crop' ) );
+		remove_filter( 'noon_focal_cdn_url', '__return_empty_string', PHP_INT_MAX );
 
 		$response = wp_remote_get( $url, array(
 			'timeout'     => 15,
@@ -386,6 +407,19 @@ class Noon_Focal_Retina_Image_Generator_Status {
 				$info = function_exists( 'getimagesizefromstring' ) ? @getimagesizefromstring( $body ) : false;
 
 				if ( $info && self::TEST_SIZE === (int) $info[0] && self::TEST_SIZE === (int) $info[1] ) {
+
+					$cache_control = (string) wp_remote_retrieve_header( $response, 'cache-control' );
+
+					if ( ! self::cacheable( $cache_control ) ) {
+						return array(
+							'label'  => $label,
+							'state'  => 'warn',
+							/* translators: 1: Cache-Control header value */
+							'text'   => sprintf( __( 'Rendering works, but the response is not cacheable by browsers or a CDN (Cache-Control: %1$s). Something on the server overrides Glide\'s header for PHP responses; the plugin\'s own .htaccess fixes this on Apache. On nginx, see the README.', 'noon-focus-crop' ), '' !== $cache_control ? $cache_control : __( 'none', 'noon-focus-crop' ) ),
+							'detail' => $detail,
+						);
+					}
+
 					return array(
 						'label' => $label,
 						'state' => 'ok',
@@ -429,6 +463,106 @@ class Noon_Focal_Retina_Image_Generator_Status {
 				/* translators: %d: HTTP status */
 				return array( 'label' => $label, 'state' => 'error', 'text' => sprintf( __( 'Unexpected HTTP %d.', 'noon-focus-crop' ), $code ), 'detail' => $detail );
 		}
+
+	}
+
+	/**
+	 * Whether a Cache-Control value lets browsers and shared caches keep the
+	 * response.
+	 */
+	private static function cacheable( $cache_control ) {
+
+		$cache_control = strtolower( (string) $cache_control );
+
+		if ( '' === $cache_control || preg_match( '/\b(no-store|no-cache|private)\b|max-age=0\b/', $cache_control ) ) {
+			return false;
+		}
+
+		return (bool) preg_match( '/\b(s-)?max-age=[1-9]/', $cache_control );
+
+	}
+
+	/**
+	 * Request one rendition through the CDN: it must be cached on the second
+	 * request, and must keep WebP and non-WebP clients apart (Vary: Accept).
+	 */
+	private function check_cdn() {
+
+		$label = __( 'CDN', 'noon-focus-crop' );
+		$cdn   = noon_focal_cdn_url();
+		$id    = $this->sample_attachment();
+
+		if ( ! $id ) {
+			return array( 'label' => $label, 'state' => 'info', 'text' => __( 'No JPEG/PNG uploads to test with yet.', 'noon-focus-crop' ) );
+		}
+
+		$url = noon_focal_glide_url( $id, array( 'w' => self::TEST_SIZE, 'h' => self::TEST_SIZE, 'fit' => 'crop' ) );
+
+		$get = function ( $accept ) use ( $url ) {
+			return wp_remote_get( $url, array(
+				'timeout'     => 15,
+				'redirection' => 0,
+				'headers'     => array( 'Accept' => $accept ),
+			) );
+		};
+
+		$get( 'image/webp,image/*' );
+		$webp = $get( 'image/webp,image/*' );
+		$get( 'image/png,image/jpeg,image/*' );
+		$other = $get( 'image/png,image/jpeg,image/*' );
+
+		foreach ( array( $webp, $other ) as $response ) {
+			if ( is_wp_error( $response ) ) {
+				return array(
+					'label'  => $label,
+					'state'  => 'warn',
+					/* translators: 1: CDN URL, 2: error message */
+					'text'   => sprintf( __( 'Could not reach %1$s from this server (%2$s). Open the URL below in a browser to check by hand.', 'noon-focus-crop' ), $cdn, $response->get_error_message() ),
+					'detail' => $url,
+				);
+			}
+		}
+
+		$problems = array();
+		$code     = wp_remote_retrieve_response_code( $webp );
+
+		if ( 200 !== $code ) {
+			/* translators: %d: HTTP status */
+			$problems[] = sprintf( __( 'the CDN answered HTTP %d instead of 200', 'noon-focus-crop' ), $code );
+		}
+
+		$status = strtoupper( (string) wp_remote_retrieve_header( $webp, 'cdn-cache' ) );
+
+		if ( '' === $status ) {
+			$problems[] = __( 'no CDN-Cache header, so caching could not be confirmed (is this a BunnyCDN pull zone?)', 'noon-focus-crop' );
+		} elseif ( false === strpos( $status, 'HIT' ) ) {
+			/* translators: %s: CDN-Cache header value */
+			$problems[] = sprintf( __( 'a repeated request was not served from the CDN cache (CDN-Cache: %s); check that the origin response is cacheable and that the pull zone caches query strings', 'noon-focus-crop' ), $status );
+		}
+
+		$webp_type  = (string) wp_remote_retrieve_header( $webp, 'content-type' );
+		$other_type = (string) wp_remote_retrieve_header( $other, 'content-type' );
+
+		if ( noon_focal_webp_supported() && 'image/webp' === $other_type ) {
+			$problems[] = __( 'a browser that does not accept WebP was sent WebP; enable "Vary Cache → WebP support" on the pull zone', 'noon-focus-crop' );
+		}
+
+		if ( ! $problems ) {
+			return array(
+				'label' => $label,
+				'state' => 'ok',
+				/* translators: 1: CDN URL, 2: content type, 3: content type */
+				'text'  => sprintf( __( 'Serving from %1$s and caching (WebP clients get %2$s, others %3$s).', 'noon-focus-crop' ), $cdn, $webp_type, $other_type ),
+			);
+		}
+
+		return array(
+			'label'  => $label,
+			'state'  => 'warn',
+			/* translators: 1: CDN URL, 2: list of problems */
+			'text'   => sprintf( __( '%1$s: %2$s.', 'noon-focus-crop' ), $cdn, implode( '; ', $problems ) ),
+			'detail' => $url,
+		);
 
 	}
 

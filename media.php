@@ -40,6 +40,24 @@ use League\Glide\Signatures\SignatureException;
 use League\Glide\Signatures\SignatureFactory;
 
 /**
+ * End the request with an error status that no browser or CDN keeps.
+ *
+ * @param int $code HTTP status.
+ */
+function noon_focal_fail( $code ) {
+
+	http_response_code( $code );
+
+	if ( ! headers_sent() ) {
+		header_remove( 'Vary' );
+		header( 'Cache-Control: no-store' );
+	}
+
+	exit;
+
+}
+
+/**
  * Serve the untouched upload instead. `direct=true` is excluded by the rewrite
  * rule so the web server delivers the file itself.
  *
@@ -51,9 +69,12 @@ function noon_focal_serve_original( $path, $file_path ) {
 	// Resolve against the uploads dir: on a subdirectory multisite the request
 	// path may carry a site slug that does not exist on disk.
 	if ( ! is_file( NOON_FOCAL_UPLOADS_DIR . '/' . $file_path ) ) {
-		http_response_code( 404 );
-		exit;
+		noon_focal_fail( 404 );
 	}
+
+	// Short-lived: the redirect stands in for a rendition, which may become
+	// available (e.g. once the secret is readable).
+	header( 'Cache-Control: public, max-age=300' );
 
 	// A path starting "//" or "/\" would be read by browsers as another host
 	// (e.g. //2130706433/… is 127.0.0.1), making this an open redirect.
@@ -84,8 +105,7 @@ function noon_focal_serve_request() {
 		|| false !== strpos( $path, '/' . basename( __FILE__ ) . '/' );
 
 	if ( $direct || '' === $path || false === $prefix || false !== strpos( $path, '..' ) || false !== strpos( $path, "\0" ) ) {
-		http_response_code( 404 );
-		exit;
+		noon_focal_fail( 404 );
 	}
 
 	// Everything after ".../uploads/" is the path inside the uploads directory.
@@ -134,6 +154,15 @@ function noon_focal_serve_request() {
 
 		$params = array_merge( $defaults, $params );
 
+		// Only Glide's own caching headers (a year, public) may go out with a
+		// rendition. Drop anything PHP added before this point (session cache
+		// limiter, auto_prepend_file, host defaults) such as no-store or Pragma.
+		// Headers the web server adds afterwards are handled by this plugin's
+		// .htaccess (Apache) or the server config (nginx); see the README.
+		header_remove( 'Cache-Control' );
+		header_remove( 'Pragma' );
+		header_remove( 'Expires' );
+
 		$server->outputImage( $file_path, $params );
 
 		// Mark the rendition as used so the daily prune keeps it. At most once
@@ -145,13 +174,13 @@ function noon_focal_serve_request() {
 
 	} catch ( FileNotFoundException $e ) {
 
-		http_response_code( 404 );
+		noon_focal_fail( 404 );
 
 	} catch ( Throwable $e ) {
 
-		http_response_code( 500 );
 		// Without WordPress the PHP error log is the only channel for this.
 		error_log( 'noon-focus-crop: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		noon_focal_fail( 500 );
 
 	}
 

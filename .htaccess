@@ -1,0 +1,28 @@
+# Studio Noon Focus Crop: caching headers for Glide renditions.
+#
+# Applies to media.php only. The root .htaccess rewrites signed upload URLs
+# here, and Apache then reads this file for the rewritten request. Hosts often
+# add "Cache-Control: no-store" to every PHP response, which stops browsers and
+# CDNs keeping the images. That is replaced here, for this one file. Every
+# other PHP file keeps the host's headers.
+#
+# Rendered images (200) are cached for a year: a rendition's URL changes
+# whenever its source or crop does. Errors are never cached. Redirects to the
+# original file keep the short lifetime media.php gives them.
+
+<Files "media.php">
+
+	# Only FileInfo overrides are used (mod_headers), the same as the root
+	# .htaccess rewrite needs. mod_expires is left alone: Glide sends its own
+	# Expires header, which mod_expires does not override.
+
+	<IfModule mod_headers.c>
+		Header unset Cache-Control "expr=%{REQUEST_STATUS} == 200 || %{REQUEST_STATUS} -ge 400"
+		Header always unset Cache-Control "expr=%{REQUEST_STATUS} == 200 || %{REQUEST_STATUS} -ge 400"
+		Header unset Pragma "expr=%{REQUEST_STATUS} == 200"
+		Header always unset Pragma "expr=%{REQUEST_STATUS} == 200"
+		Header always set Cache-Control "public, max-age=31536000, immutable" "expr=%{REQUEST_STATUS} == 200"
+		Header always set Cache-Control "no-store" "expr=%{REQUEST_STATUS} -ge 400"
+	</IfModule>
+
+</Files>

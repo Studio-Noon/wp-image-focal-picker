@@ -87,9 +87,9 @@ noon_focal_set_responsive_size( 'large', [ 'sizes' => '(min-width: 768px) 50vw, 
 ```
 
 - **With `breakpoints`** the output is `<picture>` with one `<source media="(min-width: …)">` per breakpoint, each offered at 1x / 1.5x / 2x (`noon_focal_dprs`), and the normal `<img>` (the size's own box, with its dpr `srcset`) as the fallback for smaller viewports. A `0` key overrides that base box. Boxes with `crop => true` (the default for arrays here) use the focal point.
-- **Without `breakpoints`** the `srcset` lists the size's `widths` — or, when none are given, `noon_focal_auto_widths` (`320 … 1920`, only those below the size's width) plus the size's width — each multiplied by every dpr, at the size's aspect ratio, capped at the original width. So a 800×600 size on a 2000px original offers 320w … 1600w.
+- **Without `breakpoints`** the `srcset` lists the size's `widths` — or, when none are given, `noon_focal_auto_widths` (`320 … 1920`, only those below the size's width) plus the size's width — each multiplied by every dpr, at the size's aspect ratio, capped at the original width and at `noon_focal_max_output_width` (2560px). So a 800×600 size on a 2000px original offers 320w … 1600w.
 - `sizes` is used when the template passes no `sizes` attr; otherwise WordPress's default `(max-width: Wpx) 100vw, Wpx` applies.
-- The cache warmer pre-builds every breakpoint box and ladder width.
+- If a responsive size is opted into warming (`noon_focal_warm_sizes`), the warmer builds exactly what this markup requests: the `<img>`, its `srcset` and every breakpoint `<source>`.
 - Since `wp_calculate_image_srcset` only sees `[w, h]`, a ladder size is recognised by its box; two responsive sizes that resolve to the same box are ambiguous (the first registered wins).
 
 For art direction without a registered size, build a `<picture>` from the same functions:
@@ -111,25 +111,58 @@ The detector and its embedded weights are only fetched on the first click, from 
 - `noon_focal_face_detection` — return `false` to hide the button.
 - `npm run build` embeds the model weights into the lazy-loaded `admin/build/face-api.js` chunk. No separate `.bin` or `.dat` request is needed; without the detector chunk the button is not shown.
 
-## Cache warming
+## Cache and expiry
 
-Renditions are built on first request. To avoid that hit:
+Renditions are built on their first request, cached in `wp-content/cache/noon-images/`, and deleted by a daily WP-Cron pass once nobody has requested them for 14 days (2 days when a CDN is configured). Each request refreshes a rendition's timestamp at most once a day. _Settings → Media → Image cache_ has purge buttons, and `wp noon-focal purge [--network|--expired]` does the same from WP-CLI. If your host disables WP-Cron, make sure `wp cron event run --due-now` runs from a system cron, or the cache never expires.
 
-- **Automatic** — every new upload, and every focal point change, queues a WP-Cron job that pre-builds all registered sizes at 1x / 1.5x / 2x in the native format and WebP.
-- **Media library** — select images in list view and choose the _Warm image cache_ bulk action.
-- **Everything** — _Settings → Media → Image cache → Warm cache for all images_ walks the whole library in 20-second cron batches and shows progress.
-- **WP-CLI** — `wp noon-focal warm` (all images) or `wp noon-focal warm 12 34 --force` (rebuild those two).
+## Cache warming (opt-in)
 
-Already-cached renditions are skipped, so warming is safe to repeat. If your host disables WP-Cron, make sure `wp cron event run --due-now` runs from a system cron.
+Nothing is pre-built by default. Warming every size for every image used to multiply the cache to several times the size of the uploads, mostly with renditions nobody ever requested. To pre-build a size nearly every image is shown at, opt it in:
+
+```php
+add_filter( 'noon_focal_warm_sizes', fn() => [ 'card' ] );
+```
+
+Opted-in sizes are built in the background when an image is uploaded or its focal point changes, and by `wp noon-focal warm [<id>...] [--force]`. Only the renditions the front end requests for those sizes are built (the `src`, the dpr or width-ladder `srcset`, and any breakpoint `<source>`s), in WebP where PHP can encode it (`noon_focal_warm_formats`). There is no warm button in the admin.
+
+Warming is switched off entirely by `define( 'NOON_FOCAL_DISABLE_WARMING', true );` in `wp-config.php`, by the `noon_focal_warming_enabled` filter, or by configuring a CDN. With a CDN, warming would only fill this server's disk.
+
+## CDN (BunnyCDN)
+
+Put a pull zone in front of the image endpoint and the CDN keeps the renditions. This server's cache then only bridges CDN misses.
+
+1. Create a pull zone whose origin is the site (e.g. `https://example.com`).
+2. Enable **Perma-Cache** (renditions kept in Bunny Storage, so each one is rendered here about once).
+3. Enable **Vary Cache → WebP support**. `media.php` picks WebP or JPEG/PNG from the `Accept` header; without this, Bunny can send WebP to browsers that cannot show it.
+4. Leave **Ignore query strings** off: `w`, `h`, `fit` and `s` are part of the cache key.
+5. In `wp-config.php`: `define( 'NOON_FOCAL_CDN_URL', 'https://example.b-cdn.net' );`. On multisite, use the `noon_focal_cdn_url` filter (`$cdn`, `$blog_id`) for per-site zones.
+
+Glide URLs are then built on the CDN host. Signatures cover only the path, so they validate unchanged when Bunny pulls from the origin. A focal point change produces new URLs, so no CDN purge is needed. Replacing a file in place, or deleting an attachment, does not purge the CDN; purge the pull zone if that matters. The status panel on _Settings → Media_ checks that a repeat request is a `CDN-Cache: HIT` and that non-WebP clients are not sent WebP.
+
+## Caching headers
+
+Renditions are sent with `Cache-Control: public, max-age=31536000`; errors are sent with `no-store`. Many hosts add `no-store` to every PHP response, and that includes `media.php`, so browsers and CDNs cache nothing. The plugin handles this for `media.php` only:
+
+- `media.php` drops any `Cache-Control` / `Pragma` / `Expires` PHP set before rendering.
+- The plugin's own `.htaccess` (Apache) replaces whatever the server adds, for `media.php` alone. Other PHP files keep the host's headers. It needs `mod_headers` and `AllowOverride` covering `FileInfo` for the plugin directory (the same as the root `.htaccess` needs for the rewrite).
+- **nginx** ignores `.htaccess`. Add the headers in the `location` that hands `media.php` to PHP-FPM, e.g. `fastcgi_hide_header Cache-Control; add_header Cache-Control "public, max-age=31536000, immutable" always;` in a dedicated `location = /wp-content/plugins/noon-focus-crop/media.php` block.
+- If a proxy in front of the web server (Varnish, a host's nginx) rewrites the header, it has to be fixed there. With BunnyCDN you can instead override the cache time in the pull zone.
+
+The status panel's live request warns when the rendition it fetches is not cacheable.
 
 ## Hooks
 
 - `noon_focal_default_focus` — `[ x, y ]` (0–1) used for images without a stored focal point.
-- `noon_focal_dprs` — device pixel ratios offered in `srcset` and pre-built by the warmer. Default `[ 1, 1.5, 2 ]`.
+- `noon_focal_dprs` — device pixel ratios offered in `srcset`. Default `[ 1, 1.5, 2 ]`.
+- `noon_focal_max_output_width` — widest rendition ever produced; wider density steps and ladder widths give way to one step at this width. Default `2560`, `0` for none.
 - `noon_focal_auto_widths` — `( int[] $widths, string $size_name )` ladder for responsive sizes registered without `widths`. Default `[ 320, 480, 640, 768, 1024, 1280, 1536, 1920 ]`.
 - `noon_focal_responsive_sizes` — `name => [ 'breakpoints', 'widths', 'sizes' ]` map of responsive definitions.
-- `noon_focal_warm_sizes` — size names / `[w, h]` arrays the warmer builds per attachment. Default: all registered sizes.
+- `noon_focal_warm_sizes` — `( array $sizes, int $attachment_id )` size names / boxes the warmer builds. Default: none.
+- `noon_focal_warm_formats` — `( array[] $formats, string $file )` format/quality params each warmed rendition is built in. Default: WebP where supported.
 - `noon_focal_warm_variants` — final list of Glide parameter sets the warmer builds.
+- `noon_focal_warming_enabled` — `bool`; `false` turns warming off (as does `NOON_FOCAL_DISABLE_WARMING`).
+- `noon_focal_cdn_url` — `( string $cdn, int $blog_id )` CDN origin for Glide URLs. Default `NOON_FOCAL_CDN_URL` or none.
+- `noon_focal_cache_max_age` — seconds a rendition may go unrequested before it expires. Default 14 days (2 with a CDN); `0` disables expiry.
 - `noon_focal_cache_purged` — action fired after an attachment's renditions are purged.
 - `noon_focal_preview_sizes` — `[ [ 'label', 'w', 'h' ], … ]` boxes shown as live crop previews under the pickers. Default: every cropped registered size plus responsive breakpoint boxes.
 - `noon_focal_enqueue_media_assets` — `( bool $load, string $hook_suffix )`; return `false` to keep the media-modal picker off a given admin screen.

@@ -872,7 +872,8 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 
 	/**
 	 * Replace the srcset candidates with Glide URLs for the requested size at
-	 * each device pixel ratio (capped at the original width). Using `dpr` means
+	 * each device pixel ratio (capped at the original and the output ceiling,
+	 * see noon_focal_dpr_candidates()). Using `dpr` means
 	 * the 1x candidate is the same cache entry as the <img> src, and the cache
 	 * warmer can pre-build exactly this set.
 	 */
@@ -886,51 +887,19 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 			return $sources;
 		}
 
-		$w = (int) $size_array[0];
-		$h = (int) $size_array[1];
+		$candidates = noon_focal_dpr_candidates( $attachment_id, array( 'w' => (int) $size_array[0], 'h' => (int) $size_array[1] ) );
 
-		if ( $w < 1 || $h < 1 ) {
+		if ( ! $candidates ) {
 			return $sources;
 		}
 
-		$fit     = self::get_fit( $attachment_id );
-		$source  = noon_focal_source_size( $attachment_id );
-		$max     = noon_focal_max_width( $source, array( 'w' => $w, 'h' => $h ) );
 		$sources = array();
-		$capped  = false;
 
-		foreach ( self::dprs() as $dpr ) {
-
-			$width = (int) round( $w * $dpr );
-
-			if ( $max > 0 && $width > $max ) {
-				$capped = true;
-				continue;
-			}
-
-			$params = array( 'w' => $w, 'h' => $h, 'fit' => $fit );
-			if ( 1 != $dpr ) {
-				$params['dpr'] = $dpr;
-			}
-
-			$sources[ $width ] = array(
-				'url'        => noon_focal_glide_url( $attachment_id, $params ),
+		foreach ( $candidates as $candidate ) {
+			$sources[ $candidate['width'] ] = array(
+				'url'        => noon_focal_glide_url( $attachment_id, $candidate['params'] ),
 				'descriptor' => 'w',
-				'value'      => $width,
-			);
-
-		}
-
-		// Steps were dropped for being wider than the source: top out at the source instead.
-		if ( $capped && ! isset( $sources[ $max ] ) ) {
-			$sources[ $max ] = array(
-				'url'        => noon_focal_glide_url( $attachment_id, array(
-					'w'   => $max,
-					'h'   => max( 1, min( $source[1], (int) round( $max * $h / $w ) ) ),
-					'fit' => $fit,
-				) ),
-				'descriptor' => 'w',
-				'value'      => $max,
+				'value'      => $candidate['width'],
 			);
 		}
 
@@ -1036,8 +1005,6 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 	 */
 	private function picture_sources( $attachment_id, array $breakpoints ) {
 
-		$max  = noon_focal_source_size( $attachment_id )[0];
-		$fit  = self::get_fit( $attachment_id );
 		$html = '';
 
 		krsort( $breakpoints, SORT_NUMERIC );
@@ -1056,21 +1023,13 @@ class Noon_Focal_Retina_Image_Generator_Admin {
 
 			$srcset = array();
 
-			foreach ( self::dprs() as $dpr ) {
+			// Same candidates the img srcset and the cache warmer use.
+			foreach ( noon_focal_dpr_candidates( $attachment_id, $dims ) as $candidate ) {
 
-				if ( 1 != $dpr && $max > 0 && round( $dims['w'] * $dpr ) > $max ) {
-					continue;
-				}
-
-				$params = array( 'w' => $dims['w'], 'h' => $dims['h'], 'fit' => $fit );
-				if ( 1 != $dpr ) {
-					$params['dpr'] = $dpr;
-				}
-
-				$url = noon_focal_glide_url( $attachment_id, $params );
+				$url = noon_focal_glide_url( $attachment_id, $candidate['params'] );
 
 				if ( $url ) {
-					$srcset[] = $url . ' ' . rtrim( rtrim( number_format( $dpr, 2, '.', '' ), '0' ), '.' ) . 'x';
+					$srcset[] = $url . ' ' . rtrim( rtrim( number_format( $candidate['density'], 2, '.', '' ), '0' ), '.' ) . 'x';
 				}
 
 			}

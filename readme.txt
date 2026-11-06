@@ -4,7 +4,7 @@ Tags: focal point, image crop, responsive images, webp, retina
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.3.2
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,7 +25,7 @@ Set a focal point on any image and get smart-cropped, responsive, retina and Web
 * **WebP** negotiated per request from the browser's `Accept` header. PNG and GIF keep their format, so transparency and animation are safe.
 * **Responsive image sizes**: register a size with its own `srcset` width ladder, or a different focal-cropped box per viewport for art direction — output as a `<picture>` element, automatically.
 * **Signed URLs** — with a secret configured (the default), only sizes your site asked for can be generated, so nobody can use the endpoint to burn CPU.
-* **Cache warming** in the background (WP-Cron), from the media library bulk action, from Settings → Media, or `wp noon-focal warm` in WP-CLI.
+* **On-demand cache** that expires unused renditions, with optional **opt-in warming** for chosen sizes (`noon_focal_warm_sizes`) and **BunnyCDN** support (`NOON_FOCAL_CDN_URL`).
 * **Status panel** on Settings → Media that makes a live request and tells you whether the rewrite, secret, cache directory and image library all work.
 * **Multisite** ready (network activation supported).
 
@@ -48,7 +48,7 @@ noon_focal_add_image_size( 'hero', 640, 800, true, [
 noon_focal_add_image_size( 'card', 800, 600, true ); // automatic srcset width ladder
 `
 
-Filters: `noon_focal_default_focus`, `noon_focal_dprs`, `noon_focal_auto_widths`, `noon_focal_responsive_sizes`, `noon_focal_preview_sizes`, `noon_focal_warm_sizes`, `noon_focal_warm_variants`, `noon_focal_enqueue_media_assets`. Action: `noon_focal_cache_purged`. Focal points are stored in attachment meta `noon_focal_point` (`{ x, y }`, 0–1) and exposed in the REST API.
+Filters: `noon_focal_default_focus`, `noon_focal_dprs`, `noon_focal_auto_widths`, `noon_focal_responsive_sizes`, `noon_focal_preview_sizes`, `noon_focal_warm_sizes`, `noon_focal_warm_formats`, `noon_focal_warm_variants`, `noon_focal_warming_enabled`, `noon_focal_cdn_url`, `noon_focal_cache_max_age`, `noon_focal_max_output_width`, `noon_focal_enqueue_media_assets`. Action: `noon_focal_cache_purged`. Focal points are stored in attachment meta `noon_focal_point` (`{ x, y }`, 0–1) and exposed in the REST API.
 
 Source and issues: [GitHub](https://github.com/Studio-Noon/wp-image-focal-picker).
 
@@ -106,7 +106,7 @@ Every size is offered in `srcset` at 1x, 1.5x and 2x (capped at the original's w
 
 = Is it fast? =
 
-The first request for a rendition generates and caches it; every request after that is a cached file. Uploads and focal-point changes are pre-built in the background, and there is a "warm everything" button and a WP-CLI command for existing libraries.
+The first request for a rendition generates and caches it; every request after that is a cached file. Unused renditions expire after 14 days. Sizes a theme opts in with `noon_focal_warm_sizes` are pre-built in the background when an image is uploaded or its focal point changes.
 
 = Does it work with nginx? =
 
@@ -132,6 +132,14 @@ WordPress goes back to its generated files. Sizes that were never written to dis
 4. Settings → Media status panel.
 
 == Changelog ==
+
+= 1.4.0 =
+* Cache size: the warmer no longer pre-builds every size × density × format for every image (the cache could grow to several times the uploads). Warming is now opt-in per size (`noon_focal_warm_sizes`, default none), builds WebP only, and builds exactly the renditions the front end requests. The "Warm cache for all images" button and the "Warm image cache" bulk action are removed. `NOON_FOCAL_DISABLE_WARMING` / `noon_focal_warming_enabled` turn warming off.
+* Fixed: the warmer and the front end disagreed on `<picture>` breakpoint densities and on ladder sizes, so warmed files went unused while requested ones were rendered cold. Both now share `noon_focal_dpr_candidates()` / `noon_focal_size_renditions()`.
+* No rendition is wider than 2560px (`noon_focal_max_output_width`).
+* Unused renditions now expire after 14 days instead of 30 (2 with a CDN); the status panel shows when the last expiry pass ran.
+* BunnyCDN support: `NOON_FOCAL_CDN_URL` / `noon_focal_cdn_url` serve Glide URLs from a pull zone, with a status check for cache hits and WebP variation.
+* Caching headers: renditions are no longer sent with a host's `no-store`. `media.php` drops PHP-set cache headers, and a plugin `.htaccess` fixes the Apache-added ones for `media.php` only. Errors are sent with `no-store`, and redirects to originals are cached for 5 minutes.
 
 = 1.3.3 =
 * Security: the signing secret mirror is now `uploads/.noon-focal-secret.php`, opening with an exit so it is never served as text where `.htaccess` is ignored (nginx). The old plain-text file is read until replaced, then deleted.

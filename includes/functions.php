@@ -31,7 +31,7 @@ function noon_focal_glide_url( $attachment_id, array $params ) {
 		return '';
 	}
 
-	$baseurl = wp_get_upload_dir()['baseurl'];
+	$baseurl = noon_focal_glide_baseurl();
 
 	if ( ! isset( $builders[ $baseurl ] ) ) {
 		// Glide signs only the path component, which is what media.php checks.
@@ -41,6 +41,46 @@ function noon_focal_glide_url( $attachment_id, array $params ) {
 	}
 
 	return $builders[ $baseurl ]->getUrl( $file, $params );
+
+}
+
+/**
+ * CDN origin (scheme + host, no trailing slash) that Glide URLs are served
+ * from, or '' to serve them from the site itself. Set NOON_FOCAL_CDN_URL in
+ * wp-config.php, or filter per site on multisite.
+ *
+ * The CDN pulls from the site, so its requests reach media.php through the
+ * normal upload rewrite. Signatures cover the path only, which is the same on
+ * both hosts.
+ */
+function noon_focal_cdn_url() {
+
+	$cdn = defined( 'NOON_FOCAL_CDN_URL' ) ? (string) NOON_FOCAL_CDN_URL : '';
+
+	/**
+	 * CDN origin for Glide URLs, e.g. https://example.b-cdn.net. '' disables it.
+	 *
+	 * @param string $cdn     NOON_FOCAL_CDN_URL, or ''.
+	 * @param int    $blog_id Current site.
+	 */
+	return untrailingslashit( trim( (string) apply_filters( 'noon_focal_cdn_url', $cdn, get_current_blog_id() ) ) );
+
+}
+
+/**
+ * Base URL Glide URLs are built on: the uploads URL, on the CDN host when one
+ * is configured.
+ */
+function noon_focal_glide_baseurl() {
+
+	$baseurl = wp_get_upload_dir()['baseurl'];
+	$cdn     = noon_focal_cdn_url();
+
+	if ( '' === $cdn ) {
+		return $baseurl;
+	}
+
+	return $cdn . (string) wp_parse_url( $baseurl, PHP_URL_PATH );
 
 }
 
@@ -305,7 +345,7 @@ function noon_focal_set_responsive_size( $name, array $args = array() ) {
  * All responsive definitions as name => ['breakpoints', 'widths', 'sizes'].
  * Registry lives here; pass $add to register (used by noon_focal_set_responsive_size()).
  */
-function noon_focal_responsive_sizes( array $add = null ) {
+function noon_focal_responsive_sizes( ?array $add = null ) {
 
 	static $sizes = array();
 
@@ -355,9 +395,166 @@ function noon_focal_max_width( $source, $box ) {
 }
 
 /**
+ * Widest rendition ever produced. Density steps and ladder widths above it are
+ * dropped in favour of one step at the cap. 0 for no ceiling.
+ */
+function noon_focal_max_output_width() {
+	return max( 0, (int) apply_filters( 'noon_focal_max_output_width', 2560 ) );
+}
+
+/**
+ * Widest rendition offered for a box: whichever is lower of what the source can
+ * fill at the box's aspect ratio and noon_focal_max_output_width(). 0 = no limit.
+ */
+function noon_focal_width_limit( $source, $box ) {
+	$limits = array_filter( array( noon_focal_max_width( $source, $box ), noon_focal_max_output_width() ) );
+	return $limits ? (int) min( $limits ) : 0;
+}
+
+/**
+ * Height of a rendition $width wide at $box's aspect ratio, never taller than
+ * the source.
+ */
+function noon_focal_scaled_height( $width, $box, $source ) {
+
+	$height = (int) round( $width * $box['h'] / $box['w'] );
+
+	if ( $source[1] > 0 ) {
+		$height = min( $source[1], $height );
+	}
+
+	return max( 1, $height );
+
+}
+
+/**
+ * Density (1x/1.5x/2x…) candidates for one box. This is what srcset and
+ * <picture> sources emit, and what the cache warmer builds, so they share it.
+ *
+ * The 1x box is dropped only when the source cannot fill it; higher densities
+ * also stop at noon_focal_max_output_width(). Dropped steps are replaced by one
+ * step at the limit.
+ *
+ * @param int   $attachment_id
+ * @param array $box ['w' => , 'h' => ] in CSS pixels.
+ * @return array[] Each ['density' => float, 'width' => int, 'params' => Glide params], narrowest first.
+ */
+function noon_focal_dpr_candidates( $attachment_id, array $box ) {
+
+	$w = (int) ( $box['w'] ?? 0 );
+	$h = (int) ( $box['h'] ?? 0 );
+
+	if ( $w < 1 || $h < 1 ) {
+		return array();
+	}
+
+	$box        = array( 'w' => $w, 'h' => $h );
+	$fit        = Noon_Focal_Retina_Image_Generator_Admin::get_fit( $attachment_id );
+	$source     = noon_focal_source_size( $attachment_id );
+	$source_max = noon_focal_max_width( $source, $box );
+	$limit      = noon_focal_width_limit( $source, $box );
+	$candidates = array();
+	$capped     = false;
+
+	foreach ( Noon_Focal_Retina_Image_Generator_Admin::dprs() as $dpr ) {
+
+		$width = (int) round( $w * $dpr );
+		$cap   = 1 == $dpr ? $source_max : $limit; // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual -- dprs are floats.
+
+		if ( $width < 1 ) {
+			continue;
+		}
+
+		if ( $cap > 0 && $width > $cap ) {
+			$capped = true;
+			continue;
+		}
+
+		$params = array( 'w' => $w, 'h' => $h, 'fit' => $fit );
+		if ( 1 != $dpr ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual
+			$params['dpr'] = $dpr;
+		}
+
+		$candidates[ $width ] = array( 'density' => (float) $dpr, 'width' => $width, 'params' => $params );
+
+	}
+
+	// Steps were dropped: top out at the limit instead, if that is wider than what is left.
+	if ( $capped && $limit > 0 && ( ! $candidates || $limit > max( array_keys( $candidates ) ) ) ) {
+		$candidates[ $limit ] = array(
+			'density' => $limit / $w,
+			'width'   => $limit,
+			'params'  => array( 'w' => $limit, 'h' => noon_focal_scaled_height( $limit, $box, $source ), 'fit' => $fit ),
+		);
+	}
+
+	ksort( $candidates, SORT_NUMERIC );
+
+	return array_values( $candidates );
+
+}
+
+/**
+ * Every Glide parameter set the front end can request for an attachment at a
+ * size: the <img> src, its srcset (density steps, or the width ladder for
+ * responsive sizes) and, for breakpoint sizes, each <source>'s densities. Used
+ * by the cache warmer, so warmed renditions are exactly the requested ones.
+ *
+ * @param int          $attachment_id
+ * @param string|array $size Size name, or a box as accepted by image_downsize.
+ * @return array[] Glide params (w, h, fit, dpr), without format/quality.
+ */
+function noon_focal_size_renditions( $attachment_id, $size ) {
+
+	// image_downsize() reads a plain [w, h] as a bounding box.
+	if ( is_array( $size ) && ! array_key_exists( 'crop', $size ) ) {
+		$size['crop'] = false;
+	}
+
+	$params = noon_focal_image_params( $attachment_id, $size );
+
+	if ( ! $params || empty( $params['h'] ) ) {
+		return array();
+	}
+
+	$renditions = array( $params );
+	$ladder     = is_string( $size ) ? noon_focal_responsive_candidates( $attachment_id, $size ) : array();
+
+	if ( $ladder ) {
+		foreach ( $ladder as $box ) {
+			$renditions[] = array( 'w' => $box['w'], 'h' => $box['h'], 'fit' => $params['fit'] );
+		}
+	} else {
+		foreach ( noon_focal_dpr_candidates( $attachment_id, $params ) as $candidate ) {
+			$renditions[] = $candidate['params'];
+		}
+	}
+
+	$config = noon_focal_responsive_size( $size );
+
+	foreach ( (array) ( $config['breakpoints'] ?? array() ) as $min_width => $box ) {
+
+		if ( $min_width < 1 ) {
+			continue; // The 0 breakpoint is the <img> itself.
+		}
+
+		$dims = noon_focal_dimensions( $attachment_id, $box );
+
+		foreach ( $dims ? noon_focal_dpr_candidates( $attachment_id, $dims ) : array() as $candidate ) {
+			$renditions[] = $candidate['params'];
+		}
+
+	}
+
+	return array_values( array_unique( $renditions, SORT_REGULAR ) );
+
+}
+
+/**
  * srcset boxes for a responsive size without breakpoints: its widths (or the
  * automatic ladder) times every dpr, at the size's aspect ratio, capped at the
- * original. Each is ['w' => , 'h' => ]. Empty for breakpoint sizes.
+ * original and noon_focal_max_output_width(). Each is ['w' => , 'h' => ].
+ * Empty for breakpoint sizes.
  */
 function noon_focal_responsive_candidates( $attachment_id, $name ) {
 
@@ -389,7 +586,7 @@ function noon_focal_responsive_candidates( $attachment_id, $name ) {
 	$widths[] = $box['w'];
 
 	$source = noon_focal_source_size( $attachment_id );
-	$max    = noon_focal_max_width( $source, $box );
+	$limit  = noon_focal_width_limit( $source, $box );
 
 	$candidates = array();
 	$capped     = false;
@@ -403,7 +600,7 @@ function noon_focal_responsive_candidates( $attachment_id, $name ) {
 				continue;
 			}
 
-			if ( $max > 0 && $cw > $max ) {
+			if ( $limit > 0 && $cw > $limit ) {
 				$capped = true;
 				continue;
 			}
@@ -416,11 +613,11 @@ function noon_focal_responsive_candidates( $attachment_id, $name ) {
 		}
 	}
 
-	// Steps were dropped for being wider than the source: top out at the source instead.
+	// Steps were dropped for being wider than the source or the output ceiling: top out at the limit instead.
 	if ( $capped ) {
-		$candidates[ $max ] = array(
-			'w' => $max,
-			'h' => max( 1, min( $source[1], (int) round( $max * $box['h'] / $box['w'] ) ) ),
+		$candidates[ $limit ] = array(
+			'w' => $limit,
+			'h' => noon_focal_scaled_height( $limit, $box, $source ),
 		);
 	}
 
